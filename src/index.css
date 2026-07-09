@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --border: rgba(0, 0, 0, 0.06);
+  --shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+  --radius: 1rem;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+textarea,
+input,
+select {
+  font-family: inherit;
+}
+
+.brainstorm-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #aeaeb2;
+  pointer-events: none;
+}
+
+.brainstorm-editor .brainstorm-image,
+.brainstorm-editor img {
+  display: block;
+  max-width: 100%;
+  margin: 0.75rem 0;
+  border-radius: 0.75rem;
+}
+
+@media (max-width: 767px) {
+  /* 모바일: 드래그 힌트보다 탭 인터랙션 우선 */
+  [data-dnd-draggable] {
+    touch-action: pan-y;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fade-in 0.25s ease-out;
+}
