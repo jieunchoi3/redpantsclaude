@@ -90,119 +90,121 @@ export default function App() {
   const showCalendarChrome = view === 'calendar' || view === 'placement'
 
   return (
-    <div className="min-h-svh bg-[#F5F5F7]">
-      <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5 px-4 py-5 sm:px-8 sm:py-8">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-          <div className="shrink-0">
-            <p className="text-[13px] font-medium tracking-wide text-[#6e6e73]">
-              콘텐츠 플래너
-            </p>
-            <h1 className="text-[26px] font-semibold tracking-tight text-[#1d1d1f] sm:text-[28px]">
-              Red Pants
-            </h1>
-          </div>
+    <div className="flex h-svh overflow-hidden bg-[#F5F5F7]">
+      <FreeNotes />
 
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:max-w-xl lg:max-w-2xl">
-            {view === 'board' && (
-              <div className="min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-[240px]">
-                <SmartSearchBar
-                  search={boardSearch}
-                  categories={categories}
-                  showCategoryFilters={false}
-                  compact
-                  placeholder="내 아이디어 검색하기"
-                />
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowTrash(true)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium text-[#6e6e73] transition hover:bg-white hover:text-[#1d1d1f]"
-            >
-              <Trash2 className="h-4 w-4" />
-              휴지통
-              {archivedIdeas.length > 0 && (
-                <span className="rounded-full bg-white px-1.5 text-[11px] shadow-sm">
-                  {archivedIdeas.length}
-                </span>
+      <div className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5 px-4 py-5 sm:px-8 sm:py-8">
+          <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+            <div className="shrink-0">
+              <p className="text-[13px] font-medium tracking-wide text-[#6e6e73]">
+                콘텐츠 플래너
+              </p>
+              <h1 className="text-[26px] font-semibold tracking-tight text-[#1d1d1f] sm:text-[28px]">
+                Red Pants
+              </h1>
+            </div>
+
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:max-w-xl lg:max-w-2xl">
+              {view === 'board' && (
+                <div className="min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-[240px]">
+                  <SmartSearchBar
+                    search={boardSearch}
+                    categories={categories}
+                    showCategoryFilters={false}
+                    compact
+                    placeholder="내 아이디어 검색하기"
+                  />
+                </div>
               )}
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowTrash(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium text-[#6e6e73] transition hover:bg-white hover:text-[#1d1d1f]"
+              >
+                <Trash2 className="h-4 w-4" />
+                휴지통
+                {archivedIdeas.length > 0 && (
+                  <span className="rounded-full bg-white px-1.5 text-[11px] shadow-sm">
+                    {archivedIdeas.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </header>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <ViewToggle value={view} onChange={setView} />
+            {error && <p className="text-[12px] text-red-500">{error}</p>}
           </div>
-        </header>
 
-        <FreeNotes />
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <ViewToggle value={view} onChange={setView} />
-          {error && <p className="text-[12px] text-red-500">{error}</p>}
-        </div>
-
-        {showCalendarChrome && (
-          <WeeklyGoalBar
-            weekAnchor={weekAnchor}
-            onWeekChange={setWeekAnchor}
-            ideas={ideas}
-            meta={appMeta}
-            onUpdateGoals={patchGoals}
-          />
-        )}
-
-        <main className="transition-opacity duration-200">
-          {loading ? (
-            view === 'board' ? (
-              <BoardSkeleton />
-            ) : (
-              <LoadingSkeleton rows={4} />
-            )
-          ) : view === 'board' ? (
-            <IdeaBoard
+          {showCalendarChrome && (
+            <WeeklyGoalBar
+              weekAnchor={weekAnchor}
+              onWeekChange={setWeekAnchor}
               ideas={ideas}
-              categories={categories}
-              search={boardSearch}
-              onOpenIdea={openIdea}
-              onCreateIdea={() => void handleCreateIdea()}
-              onStatusChange={(id, status) => patchIdea(id, { status })}
-              onCategoryChange={(id, categoryId) =>
-                patchIdea(id, { category_id: categoryId })
-              }
-              onDeleteIdea={archiveIdea}
-            />
-          ) : view === 'calendar' ? (
-            <MonthCalendar
-              month={month}
-              onMonthChange={setMonth}
-              ideas={ideas}
-              categories={categories}
-              onOpenIdea={openIdea}
-              onAddForDate={(date) => void handleCreateIdea(date)}
-              onStatusChange={(id, status) => patchIdea(id, { status })}
-              onSchedule={(id, date) =>
-                patchIdea(id, { scheduled_date: date })
-              }
-              filters={filters}
-              onFiltersChange={setFilters}
-              dndMode="self"
-            />
-          ) : (
-            <PlacementMode
-              month={month}
-              onMonthChange={setMonth}
-              ideas={ideas}
-              categories={categories}
-              appMeta={appMeta}
-              onOpenIdea={openIdea}
-              onAddForDate={(date) => void handleCreateIdea(date)}
-              onSchedule={(id, date) =>
-                patchIdea(id, { scheduled_date: date })
-              }
-              onStatusChange={(id, status) => patchIdea(id, { status })}
-              onApplySuggestions={applyPlacementSuggestions}
-              filters={filters}
-              onFiltersChange={setFilters}
-              onToast={toast.show}
+              meta={appMeta}
+              onUpdateGoals={patchGoals}
             />
           )}
-        </main>
+
+          <main className="transition-opacity duration-200">
+            {loading ? (
+              view === 'board' ? (
+                <BoardSkeleton />
+              ) : (
+                <LoadingSkeleton rows={4} />
+              )
+            ) : view === 'board' ? (
+              <IdeaBoard
+                ideas={ideas}
+                categories={categories}
+                search={boardSearch}
+                onOpenIdea={openIdea}
+                onCreateIdea={() => void handleCreateIdea()}
+                onStatusChange={(id, status) => patchIdea(id, { status })}
+                onCategoryChange={(id, categoryId) =>
+                  patchIdea(id, { category_id: categoryId })
+                }
+                onDeleteIdea={archiveIdea}
+              />
+            ) : view === 'calendar' ? (
+              <MonthCalendar
+                month={month}
+                onMonthChange={setMonth}
+                ideas={ideas}
+                categories={categories}
+                onOpenIdea={openIdea}
+                onAddForDate={(date) => void handleCreateIdea(date)}
+                onStatusChange={(id, status) => patchIdea(id, { status })}
+                onSchedule={(id, date) =>
+                  patchIdea(id, { scheduled_date: date })
+                }
+                filters={filters}
+                onFiltersChange={setFilters}
+                dndMode="self"
+              />
+            ) : (
+              <PlacementMode
+                month={month}
+                onMonthChange={setMonth}
+                ideas={ideas}
+                categories={categories}
+                appMeta={appMeta}
+                onOpenIdea={openIdea}
+                onAddForDate={(date) => void handleCreateIdea(date)}
+                onSchedule={(id, date) =>
+                  patchIdea(id, { scheduled_date: date })
+                }
+                onStatusChange={(id, status) => patchIdea(id, { status })}
+                onApplySuggestions={applyPlacementSuggestions}
+                filters={filters}
+                onFiltersChange={setFilters}
+                onToast={toast.show}
+              />
+            )}
+          </main>
+        </div>
       </div>
 
       {selectedIdea && (

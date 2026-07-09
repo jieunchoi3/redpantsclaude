@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronLeft, StickyNote } from 'lucide-react'
 import { fetchAppMeta, updateFreeNotes } from '../lib/appMeta'
 import { isSupabaseConfigured } from '../lib/supabase'
 
 const COLLAPSED_KEY = 'cp_free_notes_collapsed'
+const SIDEBAR_EXPANDED_W = 280
+const SIDEBAR_COLLAPSED_W = 52
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'unconfigured'
 
@@ -46,16 +48,13 @@ export function FreeNotes() {
   const [loading, setLoading] = useState(isSupabaseConfigured)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  function toggleCollapsed() {
-    setCollapsed((prev) => {
-      const next = !prev
-      try {
-        localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0')
-      } catch {
-        // ignore
-      }
-      return next
-    })
+  function setCollapsedPersist(next: boolean) {
+    setCollapsed(next)
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0')
+    } catch {
+      // ignore
+    }
   }
 
   const notesRef = useRef(notes)
@@ -76,7 +75,6 @@ export function FreeNotes() {
     setStatus('saving')
     const ok = await updateFreeNotes(value)
 
-    // 저장 중 추가 입력이 있으면 최신 dirty 상태 유지
     if (notesRef.current !== value) {
       if (ok) lastSavedRef.current = value
       return ok
@@ -107,7 +105,6 @@ export function FreeNotes() {
     }, DEBOUNCE_MS)
   }
 
-  /** 대기 중인 debounce를 즉시 저장 (blur / 이탈) */
   function flushPendingSave(opts?: { keepalive?: boolean }) {
     const pending = Boolean(debounceRef.current) || dirtyRef.current
     if (!pending) return
@@ -202,57 +199,79 @@ export function FreeNotes() {
     unconfigured: 'Supabase 미설정',
   }
 
+  const width = collapsed ? SIDEBAR_COLLAPSED_W : SIDEBAR_EXPANDED_W
+
   return (
-    <section className="rounded-2xl bg-white shadow-[var(--shadow)] transition-shadow duration-200">
-      <button
-        type="button"
-        onClick={toggleCollapsed}
-        aria-expanded={!collapsed}
-        className="flex w-full items-center gap-2 px-5 py-4 text-left transition hover:bg-[#fafafa] rounded-2xl"
-      >
-        <h2 className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
-          자유 노트
-        </h2>
-        <span
-          className={`ml-auto text-xs font-medium transition-opacity duration-150 ${
-            status === 'error' || status === 'unconfigured'
-              ? 'text-red-500'
-              : status === 'saved'
-                ? 'text-emerald-600'
-                : 'text-[#6e6e73]'
-          } ${status === 'idle' || collapsed ? 'opacity-0' : 'opacity-100'}`}
-        >
-          {statusLabel[status]}
-        </span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 text-[#aeaeb2] transition-transform duration-200 ${
-            collapsed ? '-rotate-90' : 'rotate-0'
-          }`}
-        />
-      </button>
-
-      {!collapsed && (
-        <div className="px-5 pb-5">
-          {loadError && (
-            <p className="mb-2 text-[12px] leading-relaxed text-amber-600">
-              {loadError}
-            </p>
-          )}
-
-          {loading ? (
-            <div className="h-28 animate-pulse rounded-xl bg-[#f5f5f7]" />
-          ) : (
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              onBlur={() => flushPendingSave()}
-              placeholder="아이디어, 메모, 이번 주 할 일…"
-              disabled={status === 'unconfigured'}
-              className="min-h-28 w-full resize-y rounded-xl border border-transparent bg-[#f5f5f7] px-4 py-3 text-[15px] leading-relaxed text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#aeaeb2] focus:border-[#d2d2d7] focus:bg-white focus:shadow-[var(--shadow-sm)] disabled:cursor-not-allowed disabled:opacity-60"
-            />
-          )}
+    <aside
+      className="z-20 flex h-full shrink-0 flex-col border-r border-black/[0.06] bg-white transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+      style={{ width }}
+      aria-label="자유 메모"
+    >
+      {collapsed ? (
+        <div className="flex h-full flex-col items-center gap-2 py-3">
+          <button
+            type="button"
+            onClick={() => setCollapsedPersist(false)}
+            title="자유 메모 펼치기"
+            aria-label="자유 메모 펼치기"
+            aria-expanded={false}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-[#6e6e73] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+          >
+            <StickyNote className="h-[18px] w-[18px]" />
+          </button>
         </div>
+      ) : (
+        <>
+          <div className="flex shrink-0 items-center gap-2 border-b border-black/[0.04] px-3 py-3">
+            <StickyNote className="h-4 w-4 shrink-0 text-[#6e6e73]" />
+            <h2 className="min-w-0 flex-1 truncate text-[14px] font-semibold tracking-tight text-[#1d1d1f]">
+              자유 메모
+            </h2>
+            <span
+              className={`shrink-0 text-[11px] font-medium transition-opacity duration-150 ${
+                status === 'error' || status === 'unconfigured'
+                  ? 'text-red-500'
+                  : status === 'saved'
+                    ? 'text-emerald-600'
+                    : 'text-[#6e6e73]'
+              } ${status === 'idle' ? 'opacity-0' : 'opacity-100'}`}
+            >
+              {statusLabel[status]}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCollapsedPersist(true)}
+              title="사이드바 접기"
+              aria-label="사이드바 접기"
+              aria-expanded={true}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#aeaeb2] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col p-3">
+            {loadError && (
+              <p className="mb-2 text-[11px] leading-relaxed text-amber-600">
+                {loadError}
+              </p>
+            )}
+
+            {loading ? (
+              <div className="h-full min-h-40 animate-pulse rounded-xl bg-[#f5f5f7]" />
+            ) : (
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={() => flushPendingSave()}
+                placeholder="아이디어, 메모, 이번 주 할 일…"
+                disabled={status === 'unconfigured'}
+                className="h-full min-h-0 w-full flex-1 resize-none rounded-xl border border-transparent bg-[#f5f5f7] px-3.5 py-3 text-[14px] leading-relaxed text-[#1d1d1f] outline-none transition-all duration-200 placeholder:text-[#aeaeb2] focus:border-[#d2d2d7] focus:bg-white focus:shadow-[var(--shadow-sm)] disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            )}
+          </div>
+        </>
       )}
-    </section>
+    </aside>
   )
 }
