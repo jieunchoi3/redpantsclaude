@@ -25,6 +25,10 @@ import {
   type PlacementSuggestion,
 } from '../lib/autoPlace'
 import type { CalendarFilters } from '../lib/calendarFilters'
+import {
+  accentForCategoryId,
+  categoryAccentMap,
+} from '../lib/categoryOrder'
 import { CHANNEL_COLORS, PILL_IDLE } from '../lib/colors'
 import type { AppMeta, Category, Idea, IdeaStatus } from '../types'
 
@@ -96,6 +100,11 @@ export function PlacementMode({
 
   const categoryMap = useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c])),
+    [categories],
+  )
+
+  const accentMap = useMemo(
+    () => categoryAccentMap(categories),
     [categories],
   )
 
@@ -318,8 +327,20 @@ export function PlacementMode({
         <DragOverlay dropAnimation={dropAnimation} adjustScale={false}>
           {activeIdea ? (
             activeFrom === 'calendar' ? (
-              <div className="w-[160px] origin-top-left scale-[1.04]">
-                <CalendarChipVisual idea={activeIdea} overlay />
+              <div className="w-[220px] origin-top-left scale-[1.04]">
+                <CalendarChipVisual
+                  idea={activeIdea}
+                  category={
+                    activeIdea.category_id
+                      ? categoryMap[activeIdea.category_id]
+                      : undefined
+                  }
+                  categoryAccent={accentForCategoryId(
+                    activeIdea.category_id,
+                    accentMap,
+                  )}
+                  overlay
+                />
               </div>
             ) : (
               <div className="w-56 origin-top-left scale-[1.03]">

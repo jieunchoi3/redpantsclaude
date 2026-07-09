@@ -32,7 +32,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarFilterBar } from './CalendarFilterBar'
 import { InstagramIcon, YoutubeIcon } from './ChannelBadge'
 import { StatusMenu } from './StatusMenu'
-import { STATUS_COLORS } from '../lib/colors'
+import { STATUS_COLORS, type CategoryAccent } from '../lib/colors'
+import {
+  accentForCategoryId,
+  categoryAccentMap,
+  shortCategoryLabel,
+} from '../lib/categoryOrder'
 import {
   isDimmedByFilter,
   isHiddenByFilter,
@@ -138,6 +143,16 @@ export function MonthCalendar({
     ? ideas.find((i) => i.id === activeId) ?? null
     : null
 
+  const categoryMap = useMemo(
+    () => Object.fromEntries(categories.map((c) => [c.id, c])),
+    [categories],
+  )
+
+  const accentMap = useMemo(
+    () => categoryAccentMap(categories),
+    [categories],
+  )
+
   function handleDragStart(event: DragStartEvent) {
     const ideaId = String(event.active.data.current?.ideaId ?? '')
     setActiveId(ideaId || null)
@@ -197,37 +212,43 @@ export function MonthCalendar({
         )}
       </div>
 
-      <div className="mb-1 grid grid-cols-7 gap-1">
-        {WEEKDAYS.map((d) => (
-          <div
-            key={d}
-            className="py-1 text-center text-[11px] font-medium text-[#aeaeb2]"
-          >
-            {d}
+      <div className="overflow-x-auto pb-1">
+        <div className="min-w-[1260px]">
+          <div className="mb-1 grid grid-cols-7 gap-1.5">
+            {WEEKDAYS.map((d) => (
+              <div
+                key={d}
+                className="py-1.5 text-center text-[12px] font-medium text-[#aeaeb2]"
+              >
+                {d}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="grid grid-cols-7 gap-1">
-        {days.map((day) => {
-          const dateStr = format(day, 'yyyy-MM-dd')
-          const dayIdeas = ideasByDate.get(dateStr) ?? []
-          return (
-            <CalendarDayCell
-              key={dateStr}
-              day={day}
-              dateStr={dateStr}
-              inMonth={isSameMonth(day, month)}
-              ideas={dayIdeas}
-              suggestedIdeas={suggestionsByDate.get(dateStr) ?? []}
-              filters={filters}
-              dragEnabled={dragEnabled}
-              onOpenIdea={onOpenIdea}
-              onAddForDate={onAddForDate}
-              onStatusChange={onStatusChange}
-            />
-          )
-        })}
+          <div className="grid grid-cols-7 gap-1.5">
+            {days.map((day) => {
+              const dateStr = format(day, 'yyyy-MM-dd')
+              const dayIdeas = ideasByDate.get(dateStr) ?? []
+              return (
+                <CalendarDayCell
+                  key={dateStr}
+                  day={day}
+                  dateStr={dateStr}
+                  inMonth={isSameMonth(day, month)}
+                  ideas={dayIdeas}
+                  suggestedIdeas={suggestionsByDate.get(dateStr) ?? []}
+                  filters={filters}
+                  dragEnabled={dragEnabled}
+                  categoryMap={categoryMap}
+                  accentMap={accentMap}
+                  onOpenIdea={onOpenIdea}
+                  onAddForDate={onAddForDate}
+                  onStatusChange={onStatusChange}
+                />
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -244,8 +265,20 @@ export function MonthCalendar({
         {grid}
         <DragOverlay dropAnimation={dropAnimation} adjustScale={false}>
           {activeIdea ? (
-            <div className="w-[160px] origin-top-left scale-[1.04]">
-              <CalendarChipVisual idea={activeIdea} overlay />
+            <div className="w-[220px] origin-top-left scale-[1.04]">
+              <CalendarChipVisual
+                idea={activeIdea}
+                category={
+                  activeIdea.category_id
+                    ? categoryMap[activeIdea.category_id]
+                    : undefined
+                }
+                categoryAccent={accentForCategoryId(
+                  activeIdea.category_id,
+                  accentMap,
+                )}
+                overlay
+              />
             </div>
           ) : null}
         </DragOverlay>
@@ -264,6 +297,8 @@ function CalendarDayCell({
   suggestedIdeas,
   filters,
   dragEnabled,
+  categoryMap,
+  accentMap,
   onOpenIdea,
   onAddForDate,
   onStatusChange,
@@ -275,6 +310,8 @@ function CalendarDayCell({
   suggestedIdeas: Idea[]
   filters: CalendarFilters
   dragEnabled: boolean
+  categoryMap: Record<string, Category>
+  accentMap: Record<string, CategoryAccent>
   onOpenIdea: (idea: Idea) => void
   onAddForDate: (dateStr: string) => void
   onStatusChange: (ideaId: string, status: IdeaStatus) => Promise<unknown>
@@ -292,7 +329,7 @@ function CalendarDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`group relative flex min-h-[88px] flex-col rounded-xl border p-1.5 transition-all duration-150 sm:min-h-[104px] ${
+      className={`group relative flex min-h-[190px] flex-col rounded-xl border p-2.5 transition-all duration-150 ${
         inMonth
           ? 'border-transparent bg-[#fafafa]'
           : 'border-transparent bg-transparent opacity-40'
@@ -302,7 +339,7 @@ function CalendarDayCell({
           : ''
       } ${isToday(day) && !isOver ? 'ring-1 ring-[#1d1d1f]/15' : ''}`}
     >
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-1 flex shrink-0 items-center justify-between">
         <span
           className={`flex h-6 w-6 items-center justify-center rounded-full text-[12px] font-medium ${
             isToday(day) ? 'bg-[#1d1d1f] text-white' : 'text-[#1d1d1f]'
@@ -320,11 +357,15 @@ function CalendarDayCell({
         </button>
       </div>
 
-      <div className="flex flex-1 flex-col gap-0.5 overflow-visible">
+      <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
         {visible.map((idea) => (
           <CalendarIdeaChip
             key={idea.id}
             idea={idea}
+            category={
+              idea.category_id ? categoryMap[idea.category_id] : undefined
+            }
+            categoryAccent={accentForCategoryId(idea.category_id, accentMap)}
             dimmed={isDimmedByFilter(idea, filters)}
             dragEnabled={dragEnabled}
             onOpen={() => onOpenIdea(idea)}
@@ -357,6 +398,8 @@ function CalendarDayCell({
           ideas={ideas}
           filters={filters}
           dragEnabled={dragEnabled}
+          categoryMap={categoryMap}
+          accentMap={accentMap}
           onClose={() => setShowAll(false)}
           onOpenIdea={onOpenIdea}
           onStatusChange={onStatusChange}
@@ -371,6 +414,8 @@ function DayOverflowPopover({
   ideas,
   filters,
   dragEnabled,
+  categoryMap,
+  accentMap,
   onClose,
   onOpenIdea,
   onStatusChange,
@@ -379,6 +424,8 @@ function DayOverflowPopover({
   ideas: Idea[]
   filters: CalendarFilters
   dragEnabled: boolean
+  categoryMap: Record<string, Category>
+  accentMap: Record<string, CategoryAccent>
   onClose: () => void
   onOpenIdea: (idea: Idea) => void
   onStatusChange: (ideaId: string, status: IdeaStatus) => Promise<unknown>
@@ -396,16 +443,20 @@ function DayOverflowPopover({
   return (
     <div
       ref={ref}
-      className="absolute top-8 left-0 z-40 w-[200px] rounded-xl bg-white p-2 shadow-[var(--shadow)] ring-1 ring-black/5"
+      className="absolute top-8 left-0 z-40 w-[240px] rounded-xl bg-white p-2 shadow-[var(--shadow)] ring-1 ring-black/5"
     >
       <p className="mb-1.5 px-1 text-[11px] font-medium text-[#6e6e73]">
         {dateStr}
       </p>
-      <div className="max-h-48 space-y-1 overflow-y-auto">
+      <div className="max-h-56 space-y-1 overflow-y-auto">
         {ideas.map((idea) => (
           <CalendarIdeaChip
             key={idea.id}
             idea={idea}
+            category={
+              idea.category_id ? categoryMap[idea.category_id] : undefined
+            }
+            categoryAccent={accentForCategoryId(idea.category_id, accentMap)}
             dimmed={isDimmedByFilter(idea, filters)}
             dragEnabled={dragEnabled}
             onOpen={() => {
@@ -420,28 +471,109 @@ function DayOverflowPopover({
   )
 }
 
+function chipFormats(idea: Idea): string[] {
+  return [
+    idea.channels.includes('instagram') ? idea.ig_format : null,
+    idea.channels.includes('youtube') ? idea.yt_format : null,
+  ].filter(Boolean) as string[]
+}
+
+function chipTooltip(
+  idea: Idea,
+  category: Category | undefined,
+  formats: string[],
+): string {
+  return [
+    idea.title || '제목 없음',
+    category?.name ?? '미분류',
+    formats.join(' · '),
+    idea.status,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function CalendarChipContent({
+  idea,
+  category,
+  categoryAccent: catAccent,
+  formats,
+}: {
+  idea: Idea
+  category?: Category
+  categoryAccent: CategoryAccent
+  formats: string[]
+}) {
+  const categoryName = category?.name ?? '미분류'
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-2 px-3 py-2.5">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="flex shrink-0 items-center gap-1">
+          {idea.channels.includes('instagram') && (
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-amber-400 via-pink-500 to-violet-600 text-white">
+              <InstagramIcon className="h-4 w-4" />
+            </span>
+          )}
+          {idea.channels.includes('youtube') && (
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500 text-white">
+              <YoutubeIcon className="h-4 w-4" />
+            </span>
+          )}
+        </span>
+        <span className="flex min-w-0 flex-wrap items-center gap-1">
+          {formats.map((fmt) => (
+            <span
+              key={fmt}
+              className="shrink-0 rounded-md bg-[#f0f0f2] px-2 py-1 text-[12px] font-medium leading-none text-[#6e6e73]"
+            >
+              {fmt}
+            </span>
+          ))}
+        </span>
+      </div>
+
+      <span className="line-clamp-2 min-w-0 text-[16px] font-semibold leading-[1.4] text-[#1d1d1f]">
+        {idea.title || '제목 없음'}
+      </span>
+
+      <span
+        className={`inline-flex w-fit max-w-full items-center gap-1.5 truncate rounded-full px-2.5 py-1.5 text-[12px] font-medium leading-none ${catAccent.soft}`}
+        title={categoryName}
+      >
+        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${catAccent.dot}`} />
+        <span className="truncate">
+          {category ? shortCategoryLabel(category.name) : '미분류'}
+        </span>
+      </span>
+    </div>
+  )
+}
+
 /** 칩 비주얼 — DragOverlay에서도 재사용 */
 export function CalendarChipVisual({
   idea,
+  category,
+  categoryAccent: catAccent,
   overlay,
   dimmed,
   placeholder,
 }: {
   idea: Idea
+  category?: Category
+  categoryAccent: CategoryAccent
   overlay?: boolean
   dimmed?: boolean
   placeholder?: boolean
 }) {
   const colors = STATUS_COLORS[idea.status]
   const overdue = isOverdue(idea)
-  const formats = [
-    idea.channels.includes('instagram') ? idea.ig_format : null,
-    idea.channels.includes('youtube') ? idea.yt_format : null,
-  ].filter(Boolean) as string[]
+  const formats = chipFormats(idea)
 
   return (
     <div
-      className={`relative flex w-full overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-black/[0.04] ${
+      title={chipTooltip(idea, category, formats)}
+      className={`relative flex w-full overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/[0.04] ${
         overdue ? 'ring-1 ring-red-400' : ''
       } ${dimmed && !placeholder ? 'opacity-30' : ''} ${
         placeholder ? 'opacity-40' : ''
@@ -451,41 +583,29 @@ export function CalendarChipVisual({
           : ''
       }`}
     >
-      <div className={`w-[3px] min-h-[22px] shrink-0 ${colors.dot}`} />
-      <div className="flex min-w-0 flex-1 items-center gap-1 px-1.5 py-1">
-        <span className="flex shrink-0 items-center gap-0.5">
-          {idea.channels.includes('instagram') && (
-            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-gradient-to-br from-amber-400 via-pink-500 to-violet-600 text-white">
-              <InstagramIcon className="h-2.5 w-2.5" />
-            </span>
-          )}
-          {idea.channels.includes('youtube') && (
-            <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-red-500 text-white">
-              <YoutubeIcon className="h-2.5 w-2.5" />
-            </span>
-          )}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[10px] font-medium leading-tight text-[#1d1d1f]">
-          {idea.title || '제목 없음'}
-        </span>
-        {formats.length > 0 && (
-          <span className="max-w-[40%] shrink-0 truncate text-[9px] text-[#aeaeb2]">
-            {formats.join('·')}
-          </span>
-        )}
-      </div>
+      <div className={`w-1 min-h-[112px] shrink-0 ${colors.dot}`} />
+      <CalendarChipContent
+        idea={idea}
+        category={category}
+        categoryAccent={catAccent}
+        formats={formats}
+      />
     </div>
   )
 }
 
 function CalendarIdeaChip({
   idea,
+  category,
+  categoryAccent: catAccent,
   dimmed,
   dragEnabled,
   onOpen,
   onStatusChange,
 }: {
   idea: Idea
+  category?: Category
+  categoryAccent: CategoryAccent
   dimmed: boolean
   dragEnabled: boolean
   onOpen: () => void
@@ -493,7 +613,8 @@ function CalendarIdeaChip({
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const colors = STATUS_COLORS[idea.status]
-
+  const formats = chipFormats(idea)
+  const overdue = isOverdue(idea)
   const drag = useDraggable({
     id: `cal-idea-${idea.id}`,
     data: {
@@ -511,10 +632,11 @@ function CalendarIdeaChip({
     <div
       ref={dragEnabled ? drag.setNodeRef : undefined}
       className="relative"
+      title={chipTooltip(idea, category, formats)}
     >
       <div
-        className={`relative flex w-full overflow-hidden rounded-lg bg-white shadow-sm ring-1 ring-black/[0.04] ${
-          isOverdue(idea) ? 'ring-1 ring-red-400' : ''
+        className={`relative flex w-full overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/[0.04] ${
+          overdue ? 'ring-1 ring-red-400' : ''
         } ${dimmed && !placeholder ? 'opacity-30' : ''} ${
           placeholder ? 'opacity-40' : ''
         }`}
@@ -527,7 +649,7 @@ function CalendarIdeaChip({
               e.stopPropagation()
               setMenuOpen((v) => !v)
             }}
-            className={`h-full w-[3px] min-h-[22px] transition hover:w-[4px] ${colors.dot}`}
+            className={`h-full w-1 min-h-[112px] transition hover:w-[5px] ${colors.dot}`}
           />
           {menuOpen && (
             <StatusMenu
@@ -544,39 +666,17 @@ function CalendarIdeaChip({
         <button
           type="button"
           onClick={onOpen}
-          className={`flex min-w-0 flex-1 items-center gap-1 px-1.5 py-1 text-left ${
+          className={`flex min-w-0 flex-1 text-left ${
             dragEnabled ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
           }`}
           {...(dragEnabled ? { ...drag.listeners, ...drag.attributes } : {})}
         >
-          <span className="flex shrink-0 items-center gap-0.5">
-            {idea.channels.includes('instagram') && (
-              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-gradient-to-br from-amber-400 via-pink-500 to-violet-600 text-white">
-                <InstagramIcon className="h-2.5 w-2.5" />
-              </span>
-            )}
-            {idea.channels.includes('youtube') && (
-              <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[3px] bg-red-500 text-white">
-                <YoutubeIcon className="h-2.5 w-2.5" />
-              </span>
-            )}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-[10px] font-medium leading-tight text-[#1d1d1f]">
-            {idea.title || '제목 없음'}
-          </span>
-          {([
-            idea.channels.includes('instagram') ? idea.ig_format : null,
-            idea.channels.includes('youtube') ? idea.yt_format : null,
-          ].filter(Boolean) as string[]).length > 0 && (
-            <span className="max-w-[40%] shrink-0 truncate text-[9px] text-[#aeaeb2]">
-              {(
-                [
-                  idea.channels.includes('instagram') ? idea.ig_format : null,
-                  idea.channels.includes('youtube') ? idea.yt_format : null,
-                ].filter(Boolean) as string[]
-              ).join('·')}
-            </span>
-          )}
+          <CalendarChipContent
+            idea={idea}
+            category={category}
+            categoryAccent={catAccent}
+            formats={formats}
+          />
         </button>
       </div>
     </div>

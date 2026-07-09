@@ -305,6 +305,8 @@ export function IdeaBoard({
                   }
                   onClick={() => undefined}
                   showStatus={groupBy === 'category'}
+                  showChannel={groupBy === 'status'}
+                  showCategory={groupBy === 'status'}
                   overlay
                 />
               </div>
@@ -379,7 +381,7 @@ function StatusColumn({
           categoryMap={categoryMap}
           onOpenIdea={onOpenIdea}
           onDeleteIdea={onDeleteIdea}
-          showStatus={false}
+          groupBy="status"
         />
       </div>
     </div>
@@ -461,7 +463,7 @@ function CategoryColumn({
           categoryMap={categoryMap}
           onOpenIdea={onOpenIdea}
           onDeleteIdea={onDeleteIdea}
-          showStatus
+          groupBy="category"
         />
       </div>
     </div>
@@ -473,14 +475,16 @@ function ColumnCards({
   categoryMap,
   onOpenIdea,
   onDeleteIdea,
-  showStatus,
+  groupBy,
 }: {
   ideas: Idea[]
   categoryMap: Record<string, Category>
   onOpenIdea: (idea: Idea) => void
   onDeleteIdea: (ideaId: string) => Promise<unknown>
-  showStatus: boolean
+  groupBy: GroupBy
 }) {
+  const groupedByCategory = groupBy === 'category'
+
   return (
     <div className="flex min-h-24 flex-col gap-2">
       {ideas.length === 0 ? (
@@ -498,7 +502,9 @@ function ColumnCards({
             onClick={() => onOpenIdea(idea)}
             draggable
             dragData={{ from: 'board' }}
-            showStatus={showStatus}
+            showStatus={groupedByCategory}
+            showChannel={!groupedByCategory}
+            showCategory={!groupedByCategory}
             onDelete={(item) => {
               if (!window.confirm('휴지통으로 이동할까요?')) return
               void onDeleteIdea(item.id)

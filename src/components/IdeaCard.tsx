@@ -15,6 +15,10 @@ interface IdeaCardProps {
   compact?: boolean
   /** 보드 컬럼처럼 상태가 이미 보이는 곳에선 숨김 */
   showStatus?: boolean
+  /** 카테고리 컬럼처럼 채널이 이미 보이는 곳에선 숨김 */
+  showChannel?: boolean
+  /** 카테고리 컬럼처럼 카테고리가 이미 보이는 곳에선 숨김 */
+  showCategory?: boolean
   /** DragOverlay 안에서 렌더 — 들린 스타일 */
   overlay?: boolean
   /** 호버 시 우측 삭제(휴지통) 버튼 */
@@ -30,6 +34,8 @@ export function IdeaCard({
   dragData,
   compact,
   showStatus = true,
+  showChannel = true,
+  showCategory = true,
   overlay = false,
   onDelete,
 }: IdeaCardProps) {
@@ -89,18 +95,21 @@ export function IdeaCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {idea.channels.map((ch) => (
-            <ChannelBadge
-              key={ch}
-              channel={ch}
-              compact={compact}
-              iconOnly={compact}
-            />
-          ))}
+          {showChannel &&
+            idea.channels.map((ch) => (
+              <ChannelBadge
+                key={ch}
+                channel={ch}
+                compact={compact}
+                iconOnly={compact}
+              />
+            ))}
           {formatLabel && (
-            <span className="text-[11px] text-[#6e6e73]">{formatLabel}</span>
+            <span className="rounded-full bg-[#f5f5f7] px-2 py-0.5 text-[10px] font-medium text-[#6e6e73]">
+              {formatLabel}
+            </span>
           )}
-          {category && (
+          {showCategory && category && (
             <CategoryChip
               id={category.id}
               name={category.name}
