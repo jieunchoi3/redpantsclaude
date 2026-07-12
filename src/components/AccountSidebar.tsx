@@ -1,7 +1,17 @@
 import { useMemo, useState } from 'react'
-import { Check, Layers3, Pencil, Plus, Trash2, X } from 'lucide-react'
+import {
+  Check,
+  ChevronLeft,
+  Layers3,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react'
 import type { Account, Idea } from '../types'
 import { ACCOUNT_COLORS, accountColor } from '../lib/accounts'
+
+const COLLAPSED_KEY = 'cp-jieun-accounts-collapsed'
 
 interface AccountSidebarProps {
   loading?: boolean
@@ -34,6 +44,22 @@ export function AccountSidebar({
   const [color, setColor] = useState<string>(ACCOUNT_COLORS[0])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+
+  function setCollapsedPersist(next: boolean) {
+    setCollapsed(next)
+    try {
+      localStorage.setItem(COLLAPSED_KEY, next ? '1' : '0')
+    } catch {
+      // localStorage가 차단된 환경에서는 현재 세션 상태만 유지
+    }
+  }
 
   const counts = useMemo(() => {
     const next = new Map<string, number>()
@@ -81,8 +107,27 @@ export function AccountSidebar({
   }
 
   return (
-    <aside className="z-20 flex h-full w-[248px] shrink-0 flex-col border-r border-black/[0.06] bg-white">
-      <div className="flex items-center gap-2 border-b border-black/[0.04] px-4 py-4">
+    <aside
+      className="z-20 flex h-full shrink-0 flex-col border-r border-black/[0.06] bg-white transition-[width] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+      style={{ width: collapsed ? 52 : 248 }}
+      aria-label="계정"
+    >
+      {collapsed ? (
+        <div className="flex h-full flex-col items-center py-3">
+          <button
+            type="button"
+            onClick={() => setCollapsedPersist(false)}
+            title="계정 사이드바 펼치기"
+            aria-label="계정 사이드바 펼치기"
+            aria-expanded={false}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-[#6e6e73] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+          >
+            <Layers3 className="h-[18px] w-[18px]" />
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-2 border-b border-black/[0.04] px-4 py-4">
         <Layers3 className="h-4 w-4 text-[#6e6e73]" />
         <h2 className="min-w-0 flex-1 text-[14px] font-semibold tracking-tight text-[#1d1d1f]">
           계정
@@ -96,9 +141,19 @@ export function AccountSidebar({
         >
           <Plus className="h-4 w-4" />
         </button>
-      </div>
+            <button
+              type="button"
+              onClick={() => setCollapsedPersist(true)}
+              title="계정 사이드바 접기"
+              aria-label="계정 사이드바 접기"
+              aria-expanded={true}
+              className="flex h-8 w-8 items-center justify-center rounded-xl text-[#aeaeb2] transition hover:bg-[#f5f5f7] hover:text-[#1d1d1f]"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {loading ? (
           <div className="space-y-2" aria-label="계정 불러오는 중">
             <div className="h-10 animate-pulse rounded-xl bg-[#f0f0f2]" />
@@ -197,9 +252,9 @@ export function AccountSidebar({
             )}
           </>
         )}
-      </div>
+          </div>
 
-      {editing && !loading && (
+          {editing && !loading && (
         <div className="border-t border-black/[0.05] p-3">
           <div className="rounded-2xl bg-[#f5f5f7] p-3 shadow-inner">
             <div className="mb-2 flex items-center justify-between">
@@ -256,6 +311,8 @@ export function AccountSidebar({
             </button>
           </div>
         </div>
+          )}
+        </>
       )}
     </aside>
   )

@@ -116,13 +116,14 @@ export function IdeaBoard({
     }
     map.set(UNCATEGORIZED_ID, [])
     for (const idea of search.filtered) {
+      if (workspace === 'redpants' && idea.status === '업로드 완료') continue
       const key = idea.category_id ?? UNCATEGORIZED_ID
       const list = map.get(key)
       if (list) list.push(idea)
       else map.get(UNCATEGORIZED_ID)!.push(idea)
     }
     return map
-  }, [search.filtered, orderedCategories])
+  }, [search.filtered, orderedCategories, workspace])
 
   const byAccount = useMemo(() => {
     const map = new Map<string, Idea[]>()
