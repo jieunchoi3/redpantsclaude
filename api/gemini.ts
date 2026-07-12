@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const parsed = data as GeminiResponse
       const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-      return res.status(200).json({ text, model })
+      return res.status(200).json({ text, model, failed_attempts: attempts })
     }
 
     return res.status(502).json({
