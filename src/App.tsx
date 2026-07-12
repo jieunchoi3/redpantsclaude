@@ -29,7 +29,6 @@ import type { PlacementSuggestion } from './lib/autoPlace'
 import type { CalendarFilters } from './lib/calendarFilters'
 import {
   workspaceFromUrl,
-  workspaceLabel,
   writeWorkspaceToUrl,
   type Workspace,
 } from './lib/workspace'
@@ -235,17 +234,6 @@ function PlannerApp({
               )}
               <button
                 type="button"
-                onClick={onExitWorkspace}
-                title="워크스페이스 나가기"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-[12px] font-medium text-[#86868b] transition hover:bg-white hover:text-[#1d1d1f]"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">
-                  {workspaceLabel(workspace)} · 나가기
-                </span>
-              </button>
-              <button
-                type="button"
                 onClick={() => setShowTrash(true)}
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium text-[#6e6e73] transition hover:bg-white hover:text-[#1d1d1f]"
               >
@@ -256,6 +244,15 @@ function PlannerApp({
                     {archivedIdeas.length}
                   </span>
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={onExitWorkspace}
+                title="워크스페이스 나가기"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[13px] font-medium text-[#6e6e73] shadow-[var(--shadow-sm)] ring-1 ring-black/[0.04] transition hover:text-[#1d1d1f] hover:shadow-[var(--shadow)]"
+              >
+                <LogOut className="h-4 w-4" />
+                나가기
               </button>
             </div>
           </header>
