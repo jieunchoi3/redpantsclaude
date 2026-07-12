@@ -74,3 +74,30 @@ select {
 .fade-in {
   animation: fade-in 0.25s ease-out;
 }
+
+@keyframes workspace-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-7px);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+  75% {
+    transform: translateX(-3px);
+  }
+}
+
+.workspace-shake {
+  animation: workspace-shake 0.32s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .workspace-shake {
+    animation: none;
+  }
+}

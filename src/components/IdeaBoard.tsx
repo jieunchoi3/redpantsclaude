@@ -24,17 +24,22 @@ import {
   type CategoryAccent,
 } from '../lib/colors'
 import { sortCategories, splitCategoriesByChannel } from '../lib/categoryOrder'
+import { accountColor } from '../lib/accounts'
+import type { Workspace } from '../lib/workspace'
 import {
   IDEA_STATUSES,
+  type Account,
   type Category,
   type Idea,
   type IdeaStatus,
 } from '../types'
 
-type GroupBy = 'category' | 'status'
+type GroupBy = 'category' | 'account' | 'status'
 
 interface IdeaBoardProps {
   ideas: Idea[]
+  workspace: Workspace
+  accounts: Account[]
   categories: Category[]
   search: SmartSearchState
   onOpenIdea: (idea: Idea) => void
@@ -43,6 +48,10 @@ interface IdeaBoardProps {
   onCategoryChange: (
     ideaId: string,
     categoryId: string | null,
+  ) => Promise<unknown>
+  onAccountChange: (
+    ideaId: string,
+    accountId: string | null,
   ) => Promise<unknown>
   onDeleteIdea: (ideaId: string) => Promise<unknown>
 }
@@ -61,15 +70,20 @@ const UNCATEGORIZED_ID = '__uncategorized__'
 
 export function IdeaBoard({
   ideas,
+  workspace,
+  accounts,
   categories,
   search,
   onOpenIdea,
   onCreateIdea,
   onStatusChange,
   onCategoryChange,
+  onAccountChange,
   onDeleteIdea,
 }: IdeaBoardProps) {
-  const [groupBy, setGroupBy] = useState<GroupBy>('category')
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    workspace === 'jieun' ? 'account' : 'category',
+  )
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -110,9 +124,32 @@ export function IdeaBoard({
     return map
   }, [search.filtered, orderedCategories])
 
+  const byAccount = useMemo(() => {
+    const map = new Map<string, Idea[]>()
+    for (const account of accounts) map.set(account.id, [])
+    map.set(UNCATEGORIZED_ID, [])
+    for (const idea of search.filtered) {
+      const key = idea.account_id ?? UNCATEGORIZED_ID
+      const list = map.get(key)
+      if (list) list.push(idea)
+      else map.get(UNCATEGORIZED_ID)!.push(idea)
+    }
+    return map
+  }, [accounts, search.filtered])
+
   const categoryMap = useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c])),
     [categories],
+  )
+  const accountMap = useMemo(
+    () =>
+      Object.fromEntries(
+        accounts.map((account, index) => [
+          account.id,
+          { ...account, color: accountColor(account, index) },
+        ]),
+      ),
+    [accounts],
   )
 
   const activeIdea = activeId
@@ -146,6 +183,15 @@ export function IdeaBoard({
       return
     }
 
+    if (groupBy === 'account') {
+      if (!over.startsWith('account-')) return
+      const raw = over.replace('account-', '')
+      const nextAccountId = raw === UNCATEGORIZED_ID ? null : raw
+      if (idea.account_id === nextAccountId) return
+      await onAccountChange(ideaId, nextAccountId)
+      return
+    }
+
     if (!over.startsWith('category-')) return
     const raw = over.replace('category-', '')
     const nextCategoryId = raw === UNCATEGORIZED_ID ? null : raw
@@ -154,9 +200,13 @@ export function IdeaBoard({
   }
 
   const hint =
-    groupBy === 'category'
+    groupBy === 'account'
+      ? '카드를 다른 계정 컬럼으로 드래그해 계정을 변경하세요'
+      : groupBy === 'category'
       ? '카드를 다른 카테고리 컬럼으로 드래그해 분류하세요'
       : '카드를 다른 컬럼으로 드래그해 상태를 변경하세요'
+  const primaryGroup: GroupBy =
+    workspace === 'jieun' ? 'account' : 'category'
 
   return (
     <div className="space-y-4">
@@ -169,15 +219,15 @@ export function IdeaBoard({
           <button
             type="button"
             role="tab"
-            aria-selected={groupBy === 'category'}
-            onClick={() => setGroupBy('category')}
+            aria-selected={groupBy === primaryGroup}
+            onClick={() => setGroupBy(primaryGroup)}
             className={`rounded-lg px-3.5 py-1.5 text-[13px] font-semibold transition sm:px-4 sm:py-2 ${
-              groupBy === 'category'
+              groupBy === primaryGroup
                 ? 'bg-white text-[#1d1d1f] shadow-sm'
                 : 'text-[#6e6e73] hover:text-[#1d1d1f]'
             }`}
           >
-            카테고리
+            {workspace === 'jieun' ? '계정' : '카테고리'}
           </button>
           <button
             type="button"
@@ -208,7 +258,7 @@ export function IdeaBoard({
         </button>
       </div>
 
-      {isEmpty ? (
+      {isEmpty && workspace === 'redpants' ? (
         <EmptyState
           icon={LayoutGrid}
           title="아직 아이디어가 없어요"
@@ -244,10 +294,37 @@ export function IdeaBoard({
                   status={status}
                   ideas={byStatus[status]}
                   categoryMap={categoryMap}
+                  accountMap={accountMap}
                   onOpenIdea={onOpenIdea}
                   onDeleteIdea={onDeleteIdea}
                 />
               ))}
+            </div>
+          ) : groupBy === 'account' ? (
+            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
+              {accounts.map((account, index) => (
+                <AccountColumn
+                  key={account.id}
+                  account={account}
+                  color={accountColor(account, index)}
+                  ideas={byAccount.get(account.id) ?? []}
+                  categoryMap={categoryMap}
+                  accountMap={accountMap}
+                  onOpenIdea={onOpenIdea}
+                  onDeleteIdea={onDeleteIdea}
+                />
+              ))}
+              {(byAccount.get(UNCATEGORIZED_ID)?.length ?? 0) > 0 && (
+                <AccountColumn
+                  account={null}
+                  color="#C7C7CC"
+                  ideas={byAccount.get(UNCATEGORIZED_ID) ?? []}
+                  categoryMap={categoryMap}
+                  accountMap={accountMap}
+                  onOpenIdea={onOpenIdea}
+                  onDeleteIdea={onDeleteIdea}
+                />
+              )}
             </div>
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
@@ -304,9 +381,15 @@ export function IdeaBoard({
                       : undefined
                   }
                   onClick={() => undefined}
-                  showStatus={groupBy === 'category'}
-                  showChannel={groupBy === 'status'}
-                  showCategory={groupBy === 'status'}
+                  showStatus={groupBy !== 'status'}
+                  showChannel={workspace === 'redpants' && groupBy === 'status'}
+                  showCategory={groupBy !== 'category'}
+                  showAccount={workspace === 'jieun' && groupBy === 'status'}
+                  account={
+                    activeIdea.account_id
+                      ? accountMap[activeIdea.account_id]
+                      : undefined
+                  }
                   overlay
                 />
               </div>
@@ -337,12 +420,14 @@ function StatusColumn({
   status,
   ideas,
   categoryMap,
+  accountMap,
   onOpenIdea,
   onDeleteIdea,
 }: {
   status: IdeaStatus
   ideas: Idea[]
   categoryMap: Record<string, Category>
+  accountMap: Record<string, Account>
   onOpenIdea: (idea: Idea) => void
   onDeleteIdea: (ideaId: string) => Promise<unknown>
 }) {
@@ -379,9 +464,79 @@ function StatusColumn({
         <ColumnCards
           ideas={ideas}
           categoryMap={categoryMap}
+          accountMap={accountMap}
           onOpenIdea={onOpenIdea}
           onDeleteIdea={onDeleteIdea}
           groupBy="status"
+        />
+      </div>
+    </div>
+  )
+}
+
+function AccountColumn({
+  account,
+  color,
+  ideas,
+  categoryMap,
+  accountMap,
+  onOpenIdea,
+  onDeleteIdea,
+}: {
+  account: Account | null
+  color: string
+  ideas: Idea[]
+  categoryMap: Record<string, Category>
+  accountMap: Record<string, Account>
+  onOpenIdea: (idea: Idea) => void
+  onDeleteIdea: (ideaId: string) => Promise<unknown>
+}) {
+  const dropId = account
+    ? `account-${account.id}`
+    : `account-${UNCATEGORIZED_ID}`
+  const { setNodeRef, isOver } = useDroppable({
+    id: dropId,
+    data: { type: 'account', accountId: account?.id ?? null },
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      data-account-column={account?.id ?? 'unassigned'}
+      className={`flex w-[min(16rem,85vw)] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white/80 shadow-[var(--shadow-sm)] transition-all duration-200 ${
+        isOver ? 'bg-white ring-2 ring-[#1d1d1f]/10' : ''
+      }`}
+    >
+      <div
+        className={COLUMN_HEADER_BLOCK}
+        style={{ backgroundColor: `${color}18` }}
+      >
+        <div className="flex min-h-0 flex-1 items-center gap-2 overflow-hidden">
+          <span
+            className="h-3 w-3 shrink-0 rounded-full shadow-sm ring-1 ring-black/5"
+            style={{ backgroundColor: color }}
+          />
+          <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1d1d1f]">
+            {account?.name ?? '계정 미지정'}
+          </p>
+          <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-[#6e6e73]">
+            {ideas.length}
+          </span>
+        </div>
+        <div
+          className="h-0.5 w-full shrink-0 rounded-full"
+          style={{ backgroundColor: color }}
+        />
+      </div>
+
+      <div className="flex flex-1 flex-col p-3 pt-2">
+        <ColumnCards
+          ideas={ideas}
+          categoryMap={categoryMap}
+          accountMap={accountMap}
+          onOpenIdea={onOpenIdea}
+          onDeleteIdea={onDeleteIdea}
+          groupBy="account"
         />
       </div>
     </div>
@@ -473,18 +628,18 @@ function CategoryColumn({
 function ColumnCards({
   ideas,
   categoryMap,
+  accountMap = {},
   onOpenIdea,
   onDeleteIdea,
   groupBy,
 }: {
   ideas: Idea[]
   categoryMap: Record<string, Category>
+  accountMap?: Record<string, Account>
   onOpenIdea: (idea: Idea) => void
   onDeleteIdea: (ideaId: string) => Promise<unknown>
   groupBy: GroupBy
 }) {
-  const groupedByCategory = groupBy === 'category'
-
   return (
     <div className="flex min-h-24 flex-col gap-2">
       {ideas.length === 0 ? (
@@ -499,12 +654,16 @@ function ColumnCards({
             category={
               idea.category_id ? categoryMap[idea.category_id] : undefined
             }
+            account={
+              idea.account_id ? accountMap[idea.account_id] : undefined
+            }
             onClick={() => onOpenIdea(idea)}
             draggable
             dragData={{ from: 'board' }}
-            showStatus={groupedByCategory}
-            showChannel={!groupedByCategory}
-            showCategory={!groupedByCategory}
+            showStatus={groupBy !== 'status'}
+            showChannel={groupBy === 'status'}
+            showCategory={groupBy !== 'category'}
+            showAccount={groupBy === 'status'}
             onDelete={(item) => {
               if (!window.confirm('휴지통으로 이동할까요?')) return
               void onDeleteIdea(item.id)

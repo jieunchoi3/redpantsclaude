@@ -2,6 +2,8 @@ export type Channel = 'instagram' | 'youtube'
 
 export type IgFormat = '카드뉴스' | '릴스' | '스토리'
 export type YtFormat = '롱폼' | '숏폼'
+export type JieunChannel = '인스타그램' | '해당 없음'
+export type JieunFormat = '릴스' | '포스트'
 
 export type IdeaStatus =
   | '기획하기'
@@ -22,6 +24,8 @@ export type ViewMode = 'calendar' | 'board' | 'placement'
 
 export interface Category {
   id: string
+  workspace: import('../lib/workspace').Workspace
+  account_id: string | null
   name: string
   channel: Channel
   sort_order: number
@@ -30,6 +34,10 @@ export interface Category {
 
 export interface Idea {
   id: string
+  workspace: import('../lib/workspace').Workspace
+  account_id: string | null
+  jieun_channel: JieunChannel | null
+  jieun_format: JieunFormat | null
   title: string
   brainstorm: string
   channels: Channel[]
@@ -42,6 +50,16 @@ export interface Idea {
   archived: boolean
   created_at: string
   updated_at: string
+}
+
+export interface Account {
+  id: string
+  workspace: import('../lib/workspace').Workspace
+  name: string
+  color: string | null
+  sort_order: number
+  archived: boolean
+  created_at: string
 }
 
 export interface AppMeta {

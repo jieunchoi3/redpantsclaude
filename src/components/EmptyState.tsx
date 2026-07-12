@@ -56,3 +56,48 @@ export function BoardSkeleton() {
     </div>
   )
 }
+
+export function WeeklyPlannerSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-[var(--shadow)]">
+      <div className="flex items-center justify-between border-b border-black/[0.05] px-5 py-4">
+        <div className="space-y-2">
+          <div className="h-2.5 w-20 animate-pulse rounded-full bg-[#ededee]" />
+          <div className="h-4 w-28 animate-pulse rounded-full bg-[#e5e5e7]" />
+        </div>
+        <div className="h-8 w-28 animate-pulse rounded-xl bg-[#f0f0f2]" />
+      </div>
+      <div className="overflow-hidden">
+        <div className="min-w-[1100px]">
+          <div className="grid grid-cols-[180px_repeat(7,1fr)] border-b border-black/[0.05] bg-[#fafafa]">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={index}
+                className="h-14 border-r border-black/[0.04] p-4 last:border-r-0"
+              >
+                <div className="mx-auto h-2.5 w-10 animate-pulse rounded-full bg-[#e5e5e7]" />
+              </div>
+            ))}
+          </div>
+          {Array.from({ length: 5 }).map((_, row) => (
+            <div
+              key={row}
+              className="grid grid-cols-[180px_repeat(7,1fr)] border-b border-black/[0.05]"
+            >
+              {Array.from({ length: 8 }).map((_, column) => (
+                <div
+                  key={column}
+                  className="h-28 border-r border-black/[0.04] p-4 last:border-r-0"
+                >
+                  {column === 0 && (
+                    <div className="h-3 w-24 animate-pulse rounded-full bg-[#ededee]" />
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

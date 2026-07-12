@@ -33,6 +33,7 @@ import { CalendarFilterBar } from './CalendarFilterBar'
 import { InstagramIcon, YoutubeIcon } from './ChannelBadge'
 import { StatusMenu } from './StatusMenu'
 import { STATUS_COLORS, type CategoryAccent } from '../lib/colors'
+import { accountColor } from '../lib/accounts'
 import {
   accentForCategoryId,
   categoryAccentMap,
@@ -44,13 +45,18 @@ import {
   isOverdue,
   type CalendarFilters,
 } from '../lib/calendarFilters'
-import type { Category, Idea, IdeaStatus } from '../types'
+import type { Account, Category, Idea, IdeaStatus } from '../types'
 import type { PlacementSuggestion } from '../lib/autoPlace'
+import type { Workspace } from '../lib/workspace'
 
 interface MonthCalendarProps {
   month: Date
   onMonthChange: (date: Date) => void
   ideas: Idea[]
+  workspace?: Workspace
+  accounts?: Account[]
+  selectedAccountIds?: string[]
+  onAccountFilterChange?: (ids: string[]) => void
   categories?: Category[]
   onOpenIdea: (idea: Idea) => void
   onAddForDate: (dateStr: string) => void
@@ -89,6 +95,10 @@ export function MonthCalendar({
   month,
   onMonthChange,
   ideas,
+  workspace = 'redpants',
+  accounts = [],
+  selectedAccountIds = [],
+  onAccountFilterChange,
   categories = [],
   onOpenIdea,
   onAddForDate,
@@ -148,6 +158,17 @@ export function MonthCalendar({
     [categories],
   )
 
+  const accountMap = useMemo(
+    () =>
+      Object.fromEntries(
+        accounts.map((account, index) => [
+          account.id,
+          { ...account, color: accountColor(account, index) },
+        ]),
+      ),
+    [accounts],
+  )
+
   const accentMap = useMemo(
     () => categoryAccentMap(categories),
     [categories],
@@ -204,11 +225,26 @@ export function MonthCalendar({
           </div>
         </div>
         {showFilterBar && (
-          <CalendarFilterBar
-            filters={filters}
-            onChange={onFiltersChange}
-            categories={categories}
-          />
+          workspace === 'jieun' ? (
+            <JieunCalendarFilterBar
+              accounts={accounts}
+              selectedIds={selectedAccountIds}
+              onChange={onAccountFilterChange}
+              showCompleted={filters.showCompleted}
+              onToggleCompleted={() =>
+                onFiltersChange({
+                  ...filters,
+                  showCompleted: !filters.showCompleted,
+                })
+              }
+            />
+          ) : (
+            <CalendarFilterBar
+              filters={filters}
+              onChange={onFiltersChange}
+              categories={categories}
+            />
+          )
         )}
       </div>
 
@@ -238,8 +274,11 @@ export function MonthCalendar({
                   ideas={dayIdeas}
                   suggestedIdeas={suggestionsByDate.get(dateStr) ?? []}
                   filters={filters}
+                  workspace={workspace}
+                  selectedAccountIds={selectedAccountIds}
                   dragEnabled={dragEnabled}
                   categoryMap={categoryMap}
+                  accountMap={accountMap}
                   accentMap={accentMap}
                   onOpenIdea={onOpenIdea}
                   onAddForDate={onAddForDate}
@@ -277,6 +316,11 @@ export function MonthCalendar({
                   activeIdea.category_id,
                   accentMap,
                 )}
+                account={
+                  activeIdea.account_id
+                    ? accountMap[activeIdea.account_id]
+                    : undefined
+                }
                 overlay
               />
             </div>
@@ -296,8 +340,11 @@ function CalendarDayCell({
   ideas,
   suggestedIdeas,
   filters,
+  workspace,
+  selectedAccountIds,
   dragEnabled,
   categoryMap,
+  accountMap,
   accentMap,
   onOpenIdea,
   onAddForDate,
@@ -309,8 +356,11 @@ function CalendarDayCell({
   ideas: Idea[]
   suggestedIdeas: Idea[]
   filters: CalendarFilters
+  workspace: Workspace
+  selectedAccountIds: string[]
   dragEnabled: boolean
   categoryMap: Record<string, Category>
+  accountMap: Record<string, Account>
   accentMap: Record<string, CategoryAccent>
   onOpenIdea: (idea: Idea) => void
   onAddForDate: (dateStr: string) => void
@@ -366,7 +416,16 @@ function CalendarDayCell({
               idea.category_id ? categoryMap[idea.category_id] : undefined
             }
             categoryAccent={accentForCategoryId(idea.category_id, accentMap)}
-            dimmed={isDimmedByFilter(idea, filters)}
+            account={
+              idea.account_id ? accountMap[idea.account_id] : undefined
+            }
+            dimmed={
+              isDimmedByFilter(idea, filters) ||
+              (workspace === 'jieun' &&
+                selectedAccountIds.length > 0 &&
+                (!idea.account_id ||
+                  !selectedAccountIds.includes(idea.account_id)))
+            }
             dragEnabled={dragEnabled}
             onOpen={() => onOpenIdea(idea)}
             onStatusChange={onStatusChange}
@@ -400,6 +459,9 @@ function CalendarDayCell({
           dragEnabled={dragEnabled}
           categoryMap={categoryMap}
           accentMap={accentMap}
+          workspace={workspace}
+          selectedAccountIds={selectedAccountIds}
+          accountMap={accountMap}
           onClose={() => setShowAll(false)}
           onOpenIdea={onOpenIdea}
           onStatusChange={onStatusChange}
@@ -413,8 +475,11 @@ function DayOverflowPopover({
   dateStr,
   ideas,
   filters,
+  workspace,
+  selectedAccountIds,
   dragEnabled,
   categoryMap,
+  accountMap,
   accentMap,
   onClose,
   onOpenIdea,
@@ -423,8 +488,11 @@ function DayOverflowPopover({
   dateStr: string
   ideas: Idea[]
   filters: CalendarFilters
+  workspace: Workspace
+  selectedAccountIds: string[]
   dragEnabled: boolean
   categoryMap: Record<string, Category>
+  accountMap: Record<string, Account>
   accentMap: Record<string, CategoryAccent>
   onClose: () => void
   onOpenIdea: (idea: Idea) => void
@@ -457,7 +525,16 @@ function DayOverflowPopover({
               idea.category_id ? categoryMap[idea.category_id] : undefined
             }
             categoryAccent={accentForCategoryId(idea.category_id, accentMap)}
-            dimmed={isDimmedByFilter(idea, filters)}
+            account={
+              idea.account_id ? accountMap[idea.account_id] : undefined
+            }
+            dimmed={
+              isDimmedByFilter(idea, filters) ||
+              (workspace === 'jieun' &&
+                selectedAccountIds.length > 0 &&
+                (!idea.account_id ||
+                  !selectedAccountIds.includes(idea.account_id)))
+            }
             dragEnabled={dragEnabled}
             onOpen={() => {
               onOpenIdea(idea)
@@ -471,20 +548,103 @@ function DayOverflowPopover({
   )
 }
 
+function JieunCalendarFilterBar({
+  accounts,
+  selectedIds,
+  onChange,
+  showCompleted,
+  onToggleCompleted,
+}: {
+  accounts: Account[]
+  selectedIds: string[]
+  onChange?: (ids: string[]) => void
+  showCompleted: boolean
+  onToggleCompleted: () => void
+}) {
+  function toggleAccount(id: string) {
+    if (!onChange) return
+    onChange(
+      selectedIds.includes(id)
+        ? selectedIds.filter((accountId) => accountId !== id)
+        : [...selectedIds, id],
+    )
+  }
+
+  return (
+    <div className="flex max-w-full items-center gap-1.5 overflow-x-auto pb-1">
+      <button
+        type="button"
+        onClick={() => onChange?.([])}
+        className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-medium transition ${
+          selectedIds.length === 0
+            ? 'bg-[#1d1d1f] text-white shadow-sm'
+            : 'bg-white text-[#6e6e73] ring-1 ring-black/[0.06]'
+        }`}
+      >
+        전체 계정
+      </button>
+      {accounts.map((account, index) => {
+        const selected = selectedIds.includes(account.id)
+        const color = accountColor(account, index)
+        return (
+          <button
+            key={account.id}
+            type="button"
+            onClick={() => toggleAccount(account.id)}
+            aria-pressed={selected}
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition ${
+              selected
+                ? 'bg-white text-[#1d1d1f] shadow-sm ring-1 ring-black/10'
+                : 'bg-white/70 text-[#86868b] ring-1 ring-black/[0.05] hover:text-[#1d1d1f]'
+            }`}
+          >
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: color }}
+            />
+            {account.name}
+          </button>
+        )
+      })}
+      <button
+        type="button"
+        onClick={onToggleCompleted}
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium transition ${
+          showCompleted
+            ? STATUS_COLORS['업로드 완료'].pill
+            : 'bg-white text-[#6e6e73] ring-1 ring-black/[0.06] hover:bg-emerald-50 hover:text-emerald-700'
+        }`}
+      >
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${
+            showCompleted ? 'bg-white/90' : 'bg-emerald-500'
+          }`}
+        />
+        업로드 완료
+      </button>
+    </div>
+  )
+}
+
 function chipFormats(idea: Idea): string[] {
+  if (idea.workspace === 'jieun') {
+    return idea.jieun_format ? [idea.jieun_format] : []
+  }
   return [
-    idea.channels.includes('instagram') ? idea.ig_format : null,
-    idea.channels.includes('youtube') ? idea.yt_format : null,
+    (idea.channels ?? []).includes('instagram') ? idea.ig_format : null,
+    (idea.channels ?? []).includes('youtube') ? idea.yt_format : null,
   ].filter(Boolean) as string[]
 }
 
 function chipTooltip(
   idea: Idea,
   category: Category | undefined,
+  account: Account | undefined,
   formats: string[],
 ): string {
   return [
     idea.title || '제목 없음',
+    account?.name,
     category?.name ?? '미분류',
     formats.join(' · '),
     idea.status,
@@ -496,31 +656,44 @@ function chipTooltip(
 function CalendarChipContent({
   idea,
   category,
+  account,
   categoryAccent: catAccent,
   formats,
 }: {
   idea: Idea
   category?: Category
+  account?: Account
   categoryAccent: CategoryAccent
   formats: string[]
 }) {
   const categoryName = category?.name ?? '미분류'
+  const isJieun = idea.workspace === 'jieun'
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2 px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="flex shrink-0 items-center gap-1">
-          {idea.channels.includes('instagram') && (
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-amber-400 via-pink-500 to-violet-600 text-white">
-              <InstagramIcon className="h-4 w-4" />
-            </span>
-          )}
-          {idea.channels.includes('youtube') && (
-            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500 text-white">
-              <YoutubeIcon className="h-4 w-4" />
-            </span>
-          )}
-        </span>
+        {isJieun ? (
+          <span className="inline-flex min-w-0 max-w-[110px] items-center gap-1.5 rounded-full bg-[#f5f5f7] px-2 py-1 text-[11px] font-medium text-[#6e6e73]">
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: account?.color ?? '#C7C7CC' }}
+            />
+            <span className="truncate">{account?.name ?? '계정 미지정'}</span>
+          </span>
+        ) : (
+          <span className="flex shrink-0 items-center gap-1">
+            {(idea.channels ?? []).includes('instagram') && (
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-amber-400 via-pink-500 to-violet-600 text-white">
+                <InstagramIcon className="h-4 w-4" />
+              </span>
+            )}
+            {(idea.channels ?? []).includes('youtube') && (
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-red-500 text-white">
+                <YoutubeIcon className="h-4 w-4" />
+              </span>
+            )}
+          </span>
+        )}
         <span className="flex min-w-0 flex-wrap items-center gap-1">
           {formats.map((fmt) => (
             <span
@@ -554,6 +727,7 @@ function CalendarChipContent({
 export function CalendarChipVisual({
   idea,
   category,
+  account,
   categoryAccent: catAccent,
   overlay,
   dimmed,
@@ -561,6 +735,7 @@ export function CalendarChipVisual({
 }: {
   idea: Idea
   category?: Category
+  account?: Account
   categoryAccent: CategoryAccent
   overlay?: boolean
   dimmed?: boolean
@@ -572,7 +747,7 @@ export function CalendarChipVisual({
 
   return (
     <div
-      title={chipTooltip(idea, category, formats)}
+      title={chipTooltip(idea, category, account, formats)}
       className={`relative flex w-full overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/[0.04] ${
         overdue ? 'ring-1 ring-red-400' : ''
       } ${dimmed && !placeholder ? 'opacity-30' : ''} ${
@@ -587,6 +762,7 @@ export function CalendarChipVisual({
       <CalendarChipContent
         idea={idea}
         category={category}
+        account={account}
         categoryAccent={catAccent}
         formats={formats}
       />
@@ -597,6 +773,7 @@ export function CalendarChipVisual({
 function CalendarIdeaChip({
   idea,
   category,
+  account,
   categoryAccent: catAccent,
   dimmed,
   dragEnabled,
@@ -605,6 +782,7 @@ function CalendarIdeaChip({
 }: {
   idea: Idea
   category?: Category
+  account?: Account
   categoryAccent: CategoryAccent
   dimmed: boolean
   dragEnabled: boolean
@@ -632,7 +810,7 @@ function CalendarIdeaChip({
     <div
       ref={dragEnabled ? drag.setNodeRef : undefined}
       className="relative"
-      title={chipTooltip(idea, category, formats)}
+      title={chipTooltip(idea, category, account, formats)}
     >
       <div
         className={`relative flex w-full overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-black/[0.04] ${
@@ -674,6 +852,7 @@ function CalendarIdeaChip({
           <CalendarChipContent
             idea={idea}
             category={category}
+            account={account}
             categoryAccent={catAccent}
             formats={formats}
           />

@@ -4,23 +4,29 @@ import { AppleSelect, ChannelSelectPills, SelectPills } from './AppleSelect'
 import { BrainstormEditor } from './BrainstormEditor'
 import { STATUS_COLORS } from '../lib/colors'
 import type {
+  Account,
   Category,
   Channel,
   Idea,
   IdeaStatus,
   IgFormat,
+  JieunChannel,
+  JieunFormat,
   YtFormat,
 } from '../types'
 import { IDEA_STATUSES } from '../types'
 import type { IdeaUpdate } from '../lib/ideas'
+import type { Workspace } from '../lib/workspace'
 
 interface IdeaDetailPanelProps {
   idea: Idea
+  workspace: Workspace
+  accounts: Account[]
   categories: Category[]
   onClose: () => void
   onSave: (id: string, patch: IdeaUpdate) => Promise<unknown>
   onArchive: (id: string) => Promise<unknown>
-  onOpenCategoryManager: () => void
+  onOpenCategoryManager: (accountId?: string | null) => void
 }
 
 const IG_FORMATS: IgFormat[] = ['카드뉴스', '릴스', '스토리']
@@ -29,6 +35,8 @@ const CLOSE_MS = 180
 
 export function IdeaDetailPanel({
   idea,
+  workspace,
+  accounts,
   categories,
   onClose,
   onSave,
@@ -40,6 +48,13 @@ export function IdeaDetailPanel({
   const [channels, setChannels] = useState<Channel[]>(idea.channels ?? [])
   const [igFormat, setIgFormat] = useState<IgFormat | null>(idea.ig_format)
   const [ytFormat, setYtFormat] = useState<YtFormat | null>(idea.yt_format)
+  const [accountId, setAccountId] = useState<string | null>(idea.account_id)
+  const [jieunChannel, setJieunChannel] = useState<JieunChannel>(
+    idea.jieun_channel ?? '인스타그램',
+  )
+  const [jieunFormat, setJieunFormat] = useState<JieunFormat>(
+    idea.jieun_format ?? '릴스',
+  )
   const [categoryId, setCategoryId] = useState<string | null>(idea.category_id)
   const [status, setStatus] = useState<IdeaStatus>(idea.status)
   const [scheduledDate, setScheduledDate] = useState<string | null>(
@@ -55,6 +70,9 @@ export function IdeaDetailPanel({
     setChannels(idea.channels ?? [])
     setIgFormat(idea.ig_format)
     setYtFormat(idea.yt_format)
+    setAccountId(idea.account_id)
+    setJieunChannel(idea.jieun_channel ?? '인스타그램')
+    setJieunFormat(idea.jieun_format ?? '릴스')
     setCategoryId(idea.category_id)
     setStatus(idea.status)
     setScheduledDate(idea.scheduled_date)
@@ -91,9 +109,14 @@ export function IdeaDetailPanel({
   }, [requestClose])
 
   const filteredCategories = useMemo(() => {
+    if (workspace === 'jieun') {
+      return accountId
+        ? categories.filter((category) => category.account_id === accountId)
+        : []
+    }
     if (channels.length === 0) return categories
     return categories.filter((c) => channels.includes(c.channel))
-  }, [categories, channels])
+  }, [accountId, categories, channels, workspace])
 
   const categoryOptions = useMemo(
     () => [
@@ -113,6 +136,17 @@ export function IdeaDetailPanel({
     [],
   )
 
+  const accountOptions = useMemo(
+    () => [
+      { value: '', label: '계정을 선택해주세요' },
+      ...accounts.map((account) => ({
+        value: account.id,
+        label: account.name,
+      })),
+    ],
+    [accounts],
+  )
+
   function toggleChannel(channel: Channel) {
     setChannels((prev) => {
       const next = prev.includes(channel)
@@ -125,22 +159,36 @@ export function IdeaDetailPanel({
   }
 
   async function handleSave() {
+    if (workspace === 'jieun' && !accountId) return
     setSaving(true)
     const nextCategory =
       categoryId && filteredCategories.some((c) => c.id === categoryId)
         ? categoryId
         : null
 
-    await onSave(idea.id, {
+    const common = {
       title: title.trim() || '제목 없음',
       brainstorm,
-      channels,
-      ig_format: channels.includes('instagram') ? igFormat : null,
-      yt_format: channels.includes('youtube') ? ytFormat : null,
       category_id: nextCategory,
       status,
       scheduled_date: scheduledDate,
-    })
+    }
+    await onSave(
+      idea.id,
+      workspace === 'jieun'
+        ? {
+            ...common,
+            account_id: accountId,
+            jieun_channel: jieunChannel,
+            jieun_format: jieunFormat,
+          }
+        : {
+            ...common,
+            channels,
+            ig_format: channels.includes('instagram') ? igFormat : null,
+            yt_format: channels.includes('youtube') ? ytFormat : null,
+          },
+    )
     setSaving(false)
     requestClose()
   }
@@ -207,30 +255,77 @@ export function IdeaDetailPanel({
             <BrainstormEditor value={brainstorm} onChange={setBrainstorm} />
           </Field>
 
-          <Field label="채널">
-            <ChannelSelectPills value={channels} onChange={toggleChannel} />
-          </Field>
+          {workspace === 'jieun' ? (
+            <>
+              <Field label="계정 (필수)">
+                <AppleSelect
+                  value={accountId ?? ''}
+                  options={accountOptions}
+                  placeholder="계정을 선택해주세요"
+                  onChange={(value) => {
+                    setAccountId(value || null)
+                    setCategoryId(null)
+                  }}
+                />
+                {!accountId && (
+                  <p className="mt-1.5 text-[11px] font-medium text-amber-600">
+                    저장하려면 계정을 선택해주세요.
+                  </p>
+                )}
+              </Field>
 
-          {channels.includes('instagram') && (
-            <Field label="인스타그램 포맷">
-              <SelectPills
-                options={IG_FORMATS.map((f) => ({ value: f, label: f }))}
-                value={igFormat}
-                tone="pink"
-                onChange={setIgFormat}
-              />
-            </Field>
-          )}
+              <Field label="채널">
+                <SelectPills
+                  options={[
+                    { value: '인스타그램', label: '인스타그램' },
+                    { value: '해당 없음', label: '해당 없음' },
+                  ]}
+                  value={jieunChannel}
+                  tone="pink"
+                  onChange={(value) => setJieunChannel(value as JieunChannel)}
+                />
+              </Field>
 
-          {channels.includes('youtube') && (
-            <Field label="유튜브 포맷">
-              <SelectPills
-                options={YT_FORMATS.map((f) => ({ value: f, label: f }))}
-                value={ytFormat}
-                tone="red"
-                onChange={setYtFormat}
-              />
-            </Field>
+              <Field label="포맷">
+                <SelectPills
+                  options={[
+                    { value: '릴스', label: '릴스' },
+                    { value: '포스트', label: '포스트' },
+                  ]}
+                  value={jieunFormat}
+                  tone="pink"
+                  onChange={(value) => setJieunFormat(value as JieunFormat)}
+                />
+              </Field>
+            </>
+          ) : (
+            <>
+              <Field label="채널">
+                <ChannelSelectPills value={channels} onChange={toggleChannel} />
+              </Field>
+
+              {channels.includes('instagram') && (
+                <Field label="인스타그램 포맷">
+                  <SelectPills
+                    options={IG_FORMATS.map((f) => ({ value: f, label: f }))}
+                    value={igFormat}
+                    tone="pink"
+                    onChange={setIgFormat}
+                  />
+                </Field>
+              )}
+
+              {channels.includes('youtube') && (
+                <Field label="유튜브 포맷">
+                  <SelectPills
+                    options={YT_FORMATS.map((f) => ({ value: f, label: f }))}
+                    value={ytFormat}
+                    tone="red"
+                    onChange={setYtFormat}
+                  />
+                </Field>
+              )}
+            </>
           )}
 
           <Field
@@ -238,7 +333,8 @@ export function IdeaDetailPanel({
             action={
               <button
                 type="button"
-                onClick={onOpenCategoryManager}
+                onClick={() => onOpenCategoryManager(accountId)}
+                disabled={workspace === 'jieun' && !accountId}
                 className="inline-flex items-center gap-1 text-[12px] font-medium text-[#6e6e73] transition hover:text-[#1d1d1f]"
               >
                 <Settings2 className="h-3.5 w-3.5" />
@@ -303,7 +399,7 @@ export function IdeaDetailPanel({
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={saving}
+            disabled={saving || (workspace === 'jieun' && !accountId)}
             className="rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-black disabled:opacity-50"
           >
             {saving ? '저장 중…' : '저장'}

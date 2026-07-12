@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import type { Category, Channel } from '../types'
+import type { Workspace } from '../lib/workspace'
 
 interface CategoryManagerProps {
   categories: Category[]
+  workspace: Workspace
+  accountId?: string | null
+  accountName?: string
   onAdd: (name: string, channel: Channel) => Promise<unknown>
   onRename: (id: string, name: string) => Promise<unknown>
   onDelete: (id: string) => Promise<unknown>
@@ -12,6 +16,9 @@ interface CategoryManagerProps {
 
 export function CategoryManager({
   categories,
+  workspace,
+  accountId,
+  accountName,
   onAdd,
   onRename,
   onDelete,
@@ -24,7 +31,11 @@ export function CategoryManager({
   const [busy, setBusy] = useState(false)
 
   const filtered = categories
-    .filter((c) => c.channel === channel)
+    .filter((category) =>
+      workspace === 'jieun'
+        ? category.account_id === accountId
+        : category.channel === channel,
+    )
     .sort((a, b) => a.sort_order - b.sort_order)
 
   async function handleAdd() {
@@ -57,7 +68,14 @@ export function CategoryManager({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-[var(--shadow)]">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-[17px] font-semibold text-[#1d1d1f]">카테고리 관리</h3>
+          <div>
+            <h3 className="text-[17px] font-semibold text-[#1d1d1f]">
+              카테고리 관리
+            </h3>
+            {workspace === 'jieun' && accountName && (
+              <p className="mt-0.5 text-[12px] text-[#86868b]">{accountName}</p>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -67,7 +85,8 @@ export function CategoryManager({
           </button>
         </div>
 
-        <div className="mb-4 inline-flex rounded-xl bg-[#f5f5f7] p-1">
+        {workspace === 'redpants' && (
+          <div className="mb-4 inline-flex rounded-xl bg-[#f5f5f7] p-1">
           {(
             [
               { id: 'instagram', label: '인스타그램' },
@@ -87,7 +106,8 @@ export function CategoryManager({
               {tab.label}
             </button>
           ))}
-        </div>
+          </div>
+        )}
 
         <ul className="mb-4 max-h-64 space-y-2 overflow-y-auto">
           {filtered.length === 0 && (

@@ -3,10 +3,11 @@ import { Trash2 } from 'lucide-react'
 import { ChannelBadge } from './ChannelBadge'
 import { CategoryChip } from './CategoryChip'
 import { StatusDot } from './StatusDot'
-import type { Category, Idea } from '../types'
+import type { Account, Category, Idea } from '../types'
 
 interface IdeaCardProps {
   idea: Idea
+  account?: Account
   category?: Category
   onClick: () => void
   muted?: boolean
@@ -19,6 +20,8 @@ interface IdeaCardProps {
   showChannel?: boolean
   /** 카테고리 컬럼처럼 카테고리가 이미 보이는 곳에선 숨김 */
   showCategory?: boolean
+  /** 진행현황 컬럼에서 계정 정보를 표시 */
+  showAccount?: boolean
   /** DragOverlay 안에서 렌더 — 들린 스타일 */
   overlay?: boolean
   /** 호버 시 우측 삭제(휴지통) 버튼 */
@@ -27,6 +30,7 @@ interface IdeaCardProps {
 
 export function IdeaCard({
   idea,
+  account,
   category,
   onClick,
   muted,
@@ -36,6 +40,7 @@ export function IdeaCard({
   showStatus = true,
   showChannel = true,
   showCategory = true,
+  showAccount = false,
   overlay = false,
   onDelete,
 }: IdeaCardProps) {
@@ -45,12 +50,15 @@ export function IdeaCard({
     disabled: !draggable || overlay,
   })
 
-  const formatLabel = [
-    idea.channels.includes('instagram') && idea.ig_format,
-    idea.channels.includes('youtube') && idea.yt_format,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const isJieun = idea.workspace === 'jieun'
+  const formatLabel = isJieun
+    ? idea.jieun_format
+    : [
+        idea.channels.includes('instagram') && idea.ig_format,
+        idea.channels.includes('youtube') && idea.yt_format,
+      ]
+        .filter(Boolean)
+        .join(' · ')
 
   // DragOverlay 사용 시 원본에는 transform을 걸지 않음 — placeholder만
   const placeholder = isDragging && !overlay
@@ -95,7 +103,17 @@ export function IdeaCard({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {showChannel &&
+          {showAccount && account && (
+            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-[#f5f5f7] px-2 py-0.5 text-[10px] font-medium text-[#6e6e73]">
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: account.color ?? '#C7C7CC' }}
+              />
+              <span className="truncate">{account.name}</span>
+            </span>
+          )}
+          {!isJieun &&
+            showChannel &&
             idea.channels.map((ch) => (
               <ChannelBadge
                 key={ch}
@@ -109,14 +127,20 @@ export function IdeaCard({
               {formatLabel}
             </span>
           )}
-          {showCategory && category && (
-            <CategoryChip
-              id={category.id}
-              name={category.name}
-              channel={category.channel}
-              compact={compact}
-            />
-          )}
+          {showCategory &&
+            category &&
+            (isJieun ? (
+              <span className="max-w-full truncate rounded-full bg-[#f0f0f2] px-2 py-0.5 text-[10px] font-medium text-[#6e6e73]">
+                {category.name}
+              </span>
+            ) : (
+              <CategoryChip
+                id={category.id}
+                name={category.name}
+                channel={category.channel}
+                compact={compact}
+              />
+            ))}
         </div>
       </button>
 

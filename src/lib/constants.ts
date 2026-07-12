@@ -2,6 +2,7 @@
 export const TABLES = {
   categories: 'cp_categories',
   ideas: 'cp_ideas',
+  accounts: 'cp_accounts',
   appMeta: 'cp_app_meta',
 } as const
 

@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import {
+  ACCOUNT_COLORS,
+  createAccount,
+  fetchAccounts,
+  updateAccount,
+} from '../lib/accounts'
 import { fetchAppMeta, updateAppMeta } from '../lib/appMeta'
 import {
   createCategory,
@@ -18,17 +24,20 @@ import {
 } from '../lib/ideas'
 import { isSupabaseConfigured } from '../lib/supabase'
 import type { GoalKey } from '../lib/weeklyGoals'
+import type { Workspace } from '../lib/workspace'
 import type {
   AppMeta,
+  Account,
   Category,
   Channel,
   Idea,
 } from '../types'
 
-export function usePlannerData() {
+export function usePlannerData(workspace: Workspace) {
   const [ideas, setIdeas] = useState<Idea[]>([])
   const [archivedIdeas, setArchivedIdeas] = useState<Idea[]>([])
   const [categories, setCategories] = useState<Category[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [appMeta, setAppMeta] = useState<AppMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,33 +49,35 @@ export function usePlannerData() {
       return
     }
 
-    const [active, archived, cats, meta] = await Promise.all([
-      fetchIdeas({ archived: false }),
-      fetchIdeas({ archived: true }),
-      fetchCategories(),
-      fetchAppMeta(),
+    const [active, archived, cats, accountRows, meta] = await Promise.all([
+      fetchIdeas(workspace, { archived: false }),
+      fetchIdeas(workspace, { archived: true }),
+      fetchCategories(workspace),
+      fetchAccounts(workspace),
+      workspace === 'redpants' ? fetchAppMeta() : Promise.resolve(null),
     ])
 
     setIdeas(active)
     setArchivedIdeas(archived)
     setCategories(cats)
+    setAccounts(accountRows)
     setAppMeta(meta)
     setError(null)
     setLoading(false)
-  }, [])
+  }, [workspace])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
   const addIdea = useCallback(async (input?: IdeaInsert) => {
-    const created = await createIdea(input)
+    const created = await createIdea(workspace, input)
     if (created) setIdeas((prev) => [created, ...prev])
     return created
-  }, [])
+  }, [workspace])
 
   const patchIdea = useCallback(async (id: string, patch: IdeaUpdate) => {
-    const updated = await updateIdea(id, patch)
+    const updated = await updateIdea(workspace, id, patch)
     if (!updated) return null
 
     if (updated.archived) {
@@ -85,10 +96,10 @@ export function usePlannerData() {
     }
 
     return updated
-  }, [])
+  }, [workspace])
 
   const archiveIdea = useCallback(async (id: string) => {
-    const ok = await softDeleteIdea(id)
+    const ok = await softDeleteIdea(workspace, id)
     if (!ok) return false
     setIdeas((prev) => {
       const found = prev.find((i) => i.id === id)
@@ -98,10 +109,10 @@ export function usePlannerData() {
       return prev.filter((i) => i.id !== id)
     })
     return true
-  }, [])
+  }, [workspace])
 
   const unarchiveIdea = useCallback(async (id: string) => {
-    const ok = await restoreIdea(id)
+    const ok = await restoreIdea(workspace, id)
     if (!ok) return false
     setArchivedIdeas((prev) => {
       const found = prev.find((i) => i.id === id)
@@ -111,22 +122,24 @@ export function usePlannerData() {
       return prev.filter((i) => i.id !== id)
     })
     return true
-  }, [])
+  }, [workspace])
 
   const removeIdeaForever = useCallback(async (id: string) => {
-    const ok = await permanentlyDeleteIdea(id)
+    const ok = await permanentlyDeleteIdea(workspace, id)
     if (!ok) return false
     setArchivedIdeas((prev) => prev.filter((i) => i.id !== id))
     setIdeas((prev) => prev.filter((i) => i.id !== id))
     return true
-  }, [])
+  }, [workspace])
 
   const addCategory = useCallback(
-    async (name: string, channel: Channel) => {
+    async (name: string, channel: Channel, accountId?: string | null) => {
       const maxOrder = categories
         .filter((c) => c.channel === channel)
         .reduce((max, c) => Math.max(max, c.sort_order), 0)
       const created = await createCategory({
+        workspace,
+        account_id: accountId ?? null,
         name,
         channel,
         sort_order: maxOrder + 1,
@@ -134,19 +147,19 @@ export function usePlannerData() {
       if (created) setCategories((prev) => [...prev, created])
       return created
     },
-    [categories],
+    [categories, workspace],
   )
 
   const renameCategory = useCallback(async (id: string, name: string) => {
-    const updated = await updateCategory(id, { name })
+    const updated = await updateCategory(workspace, id, { name })
     if (updated) {
       setCategories((prev) => prev.map((c) => (c.id === id ? updated : c)))
     }
     return updated
-  }, [])
+  }, [workspace])
 
   const removeCategory = useCallback(async (id: string) => {
-    const ok = await deleteCategory(id)
+    const ok = await deleteCategory(workspace, id)
     if (!ok) return false
     setCategories((prev) => prev.filter((c) => c.id !== id))
     setIdeas((prev) =>
@@ -155,7 +168,7 @@ export function usePlannerData() {
       ),
     )
     return true
-  }, [])
+  }, [workspace])
 
   const patchGoals = useCallback(
     async (patch: Partial<Pick<AppMeta, GoalKey>>) => {
@@ -172,10 +185,56 @@ export function usePlannerData() {
     [],
   )
 
+  const addAccount = useCallback(
+    async (name: string, color?: string) => {
+      const maxOrder = accounts.reduce(
+        (max, account) => Math.max(max, account.sort_order),
+        0,
+      )
+      const created = await createAccount(workspace, {
+        name,
+        color:
+          color ??
+          ACCOUNT_COLORS[accounts.length % ACCOUNT_COLORS.length]!,
+        sort_order: maxOrder + 1,
+      })
+      if (created) setAccounts((prev) => [...prev, created])
+      return created
+    },
+    [accounts, workspace],
+  )
+
+  const patchAccount = useCallback(
+    async (
+      id: string,
+      patch: Partial<Pick<Account, 'name' | 'color' | 'sort_order'>>,
+    ) => {
+      const updated = await updateAccount(workspace, id, patch)
+      if (updated) {
+        setAccounts((prev) =>
+          prev.map((account) => (account.id === id ? updated : account)),
+        )
+      }
+      return updated
+    },
+    [workspace],
+  )
+
+  const archiveAccount = useCallback(
+    async (id: string) => {
+      const updated = await updateAccount(workspace, id, { archived: true })
+      if (!updated) return false
+      setAccounts((prev) => prev.filter((account) => account.id !== id))
+      return true
+    },
+    [workspace],
+  )
+
   return {
     ideas,
     archivedIdeas,
     categories,
+    accounts,
     appMeta,
     loading,
     error,
@@ -189,6 +248,9 @@ export function usePlannerData() {
     renameCategory,
     removeCategory,
     patchGoals,
+    addAccount,
+    patchAccount,
+    archiveAccount,
   }
 }
 
