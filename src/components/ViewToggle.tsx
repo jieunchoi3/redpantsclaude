@@ -10,6 +10,7 @@ const VIEWS: { id: ViewMode; label: string }[] = [
   { id: 'calendar', label: '월간 캘린더' },
   { id: 'board', label: '아이디어 보드' },
   { id: 'placement', label: '이분할 모드' },
+  { id: 'hooks', label: '훅 라이브러리' },
 ]
 
 export function ViewToggle({
@@ -18,7 +19,7 @@ export function ViewToggle({
   calendarLabel,
 }: ViewToggleProps) {
   return (
-    <div className="inline-flex rounded-2xl bg-white p-1 shadow-[var(--shadow-sm)]">
+    <div className="inline-flex flex-wrap rounded-2xl bg-white p-1 shadow-[var(--shadow-sm)]">
       {VIEWS.map((view) => {
         const active = value === view.id
         return (

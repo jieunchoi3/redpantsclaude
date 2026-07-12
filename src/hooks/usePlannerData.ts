@@ -207,7 +207,7 @@ export function usePlannerData(workspace: Workspace) {
   const patchAccount = useCallback(
     async (
       id: string,
-      patch: Partial<Pick<Account, 'name' | 'color' | 'sort_order'>>,
+      patch: Partial<Pick<Account, 'name' | 'color' | 'sort_order' | 'notes'>>,
     ) => {
       const updated = await updateAccount(workspace, id, patch)
       if (updated) {
@@ -216,6 +216,20 @@ export function usePlannerData(workspace: Workspace) {
         )
       }
       return updated
+    },
+    [workspace],
+  )
+
+  const patchAccountNotes = useCallback(
+    async (id: string, notes: string) => {
+      const updated = await updateAccount(workspace, id, { notes })
+      if (updated) {
+        setAccounts((prev) =>
+          prev.map((account) => (account.id === id ? updated : account)),
+        )
+        return true
+      }
+      return false
     },
     [workspace],
   )
@@ -250,6 +264,7 @@ export function usePlannerData(workspace: Workspace) {
     patchGoals,
     addAccount,
     patchAccount,
+    patchAccountNotes,
     archiveAccount,
   }
 }

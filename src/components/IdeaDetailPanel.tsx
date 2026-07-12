@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CalendarOff, Settings2, Trash2, X } from 'lucide-react'
 import { AppleSelect, ChannelSelectPills, SelectPills } from './AppleSelect'
 import { BrainstormEditor } from './BrainstormEditor'
+import { IdeaHookPanel } from './IdeaHookPanel'
 import { STATUS_COLORS } from '../lib/colors'
+import type { IdeaHookContext } from '../lib/hookRelevance'
 import type {
   Account,
   Category,
@@ -12,6 +14,9 @@ import type {
   IgFormat,
   JieunChannel,
   JieunFormat,
+  HookItem,
+  HookType,
+  HookUsage,
   YtFormat,
 } from '../types'
 import { IDEA_STATUSES } from '../types'
@@ -27,6 +32,16 @@ interface IdeaDetailPanelProps {
   onSave: (id: string, patch: IdeaUpdate) => Promise<unknown>
   onArchive: (id: string) => Promise<unknown>
   onOpenCategoryManager: (accountId?: string | null) => void
+  hooks: HookItem[]
+  hookTypes: HookType[]
+  hookAccounts: Account[]
+  hookUsages: HookUsage[]
+  hooksLoading: boolean
+  onApplyHook: (hookId: string, ideaId: string) => Promise<HookUsage | null>
+  onUpdateHookUsage: (
+    id: string,
+    patch: Pick<HookUsage, 'rating' | 'note'>,
+  ) => Promise<boolean>
 }
 
 const IG_FORMATS: IgFormat[] = ['카드뉴스', '릴스', '스토리']
@@ -42,6 +57,13 @@ export function IdeaDetailPanel({
   onSave,
   onArchive,
   onOpenCategoryManager,
+  hooks,
+  hookTypes,
+  hookAccounts,
+  hookUsages,
+  hooksLoading,
+  onApplyHook,
+  onUpdateHookUsage,
 }: IdeaDetailPanelProps) {
   const [title, setTitle] = useState(idea.title)
   const [brainstorm, setBrainstorm] = useState(idea.brainstorm)
@@ -147,6 +169,30 @@ export function IdeaDetailPanel({
     [accounts],
   )
 
+  const hookContext = useMemo(
+    (): IdeaHookContext => ({
+      workspace,
+      accountId,
+      categoryName:
+        categories.find((category) => category.id === categoryId)?.name ??
+        null,
+      igFormat,
+      ytFormat,
+      jieunFormat,
+      channels,
+    }),
+    [
+      accountId,
+      categories,
+      categoryId,
+      channels,
+      igFormat,
+      jieunFormat,
+      workspace,
+      ytFormat,
+    ],
+  )
+
   function toggleChannel(channel: Channel) {
     setChannels((prev) => {
       const next = prev.includes(channel)
@@ -218,7 +264,7 @@ export function IdeaDetailPanel({
 
       {/* 중앙 모달 — 화면의 약 80% */}
       <div
-        className={`relative z-10 flex h-[min(80vh,900px)] w-[min(80vw,1100px)] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.22)] transition-all duration-[180ms] ease-out ${
+        className={`relative z-10 flex h-[min(86vh,920px)] w-[min(92vw,1240px)] flex-col overflow-hidden rounded-2xl bg-white shadow-[0_24px_80px_rgba(0,0,0,0.22)] transition-all duration-[180ms] ease-out ${
           open
             ? 'scale-100 translate-y-0 opacity-100'
             : 'scale-[0.96] translate-y-2 opacity-0'
@@ -241,7 +287,8 @@ export function IdeaDetailPanel({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
           <Field label="제목">
             <input
               value={title}
@@ -377,6 +424,26 @@ export function IdeaDetailPanel({
             </Field>
           )}
 
+          </div>
+
+          <IdeaHookPanel
+            ideaId={idea.id}
+            ideaTitle={title}
+            ideaBrainstorm={brainstorm}
+            accountName={
+              accounts.find((account) => account.id === accountId)?.name ?? null
+            }
+            context={hookContext}
+            hooks={hooks}
+            types={hookTypes}
+            accounts={hookAccounts}
+            usages={hookUsages}
+            loading={hooksLoading}
+            brainstorm={brainstorm}
+            onBrainstormChange={setBrainstorm}
+            onApplyHook={onApplyHook}
+            onUpdateUsage={onUpdateHookUsage}
+          />
         </div>
 
         <div className="flex shrink-0 items-center gap-2 border-t border-black/5 px-5 py-4 sm:px-6">

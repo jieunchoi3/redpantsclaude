@@ -3,7 +3,12 @@ export const TABLES = {
   categories: 'cp_categories',
   ideas: 'cp_ideas',
   accounts: 'cp_accounts',
+  hooks: 'cp_hooks',
+  hookTypes: 'cp_hook_types',
+  hookAccounts: 'cp_hook_accounts',
+  hookUsages: 'cp_hook_usages',
   appMeta: 'cp_app_meta',
 } as const
 
 export const STORAGE_BUCKET = 'cp-idea-images'
+export const HOOK_MEDIA_BUCKET = 'cp-hook-media'

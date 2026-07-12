@@ -1,15 +1,22 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   ChevronLeft,
+  Ellipsis,
   Layers3,
   Pencil,
   Plus,
+  StickyNote,
   Trash2,
   X,
 } from 'lucide-react'
 import type { Account, Idea } from '../types'
-import { ACCOUNT_COLORS, accountColor } from '../lib/accounts'
+import {
+  ACCOUNT_COLORS,
+  accountColor,
+  accountHasNotes,
+} from '../lib/accounts'
+import { AccountNotesModal } from './AccountNotesModal'
 
 const COLLAPSED_KEY = 'cp-jieun-accounts-collapsed'
 
@@ -25,6 +32,7 @@ interface AccountSidebarProps {
     id: string,
     patch: Pick<Account, 'name' | 'color'>,
   ) => Promise<unknown>
+  onSaveNotes: (id: string, notes: string) => Promise<boolean>
   onArchive: (id: string) => Promise<unknown>
 }
 
@@ -37,9 +45,22 @@ export function AccountSidebar({
   onClear,
   onAdd,
   onUpdate,
+  onSaveNotes,
   onArchive,
 }: AccountSidebarProps) {
   const [editing, setEditing] = useState<Account | 'new' | null>(null)
+  const [notesTarget, setNotesTarget] = useState<{
+    account: Account
+    index: number
+  } | null>(null)
+  const [menuAccountId, setMenuAccountId] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    account: Account
+    index: number
+    x: number
+    y: number
+  } | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const [name, setName] = useState('')
   const [color, setColor] = useState<string>(ACCOUNT_COLORS[0])
   const [busy, setBusy] = useState(false)
@@ -60,6 +81,23 @@ export function AccountSidebar({
       // localStorage가 차단된 환경에서는 현재 세션 상태만 유지
     }
   }
+
+  function openNotes(account: Account, index: number) {
+    setNotesTarget({ account, index })
+    setMenuAccountId(null)
+    setContextMenu(null)
+  }
+
+  useEffect(() => {
+    if (!menuAccountId && !contextMenu) return
+    function onPointerDown(event: MouseEvent) {
+      if (menuRef.current?.contains(event.target as Node)) return
+      setMenuAccountId(null)
+      setContextMenu(null)
+    }
+    window.addEventListener('mousedown', onPointerDown)
+    return () => window.removeEventListener('mousedown', onPointerDown)
+  }, [menuAccountId, contextMenu])
 
   const counts = useMemo(() => {
     const next = new Map<string, number>()
@@ -186,12 +224,23 @@ export function AccountSidebar({
             <ul className="space-y-1">
           {accounts.map((account, index) => {
             const selected = selectedIds.includes(account.id)
+            const hasNotes = accountHasNotes(account)
             return (
               <li
                 key={account.id}
-                className={`group flex items-center gap-1 rounded-xl transition ${
+                className={`group flex items-center gap-0.5 rounded-xl transition ${
                   selected ? 'bg-[#f0f0f2]' : 'hover:bg-[#f7f7f8]'
                 }`}
+                onContextMenu={(event) => {
+                  event.preventDefault()
+                  setMenuAccountId(null)
+                  setContextMenu({
+                    account,
+                    index,
+                    x: event.clientX,
+                    y: event.clientY,
+                  })
+                }}
               >
                 <button
                   type="button"
@@ -200,9 +249,16 @@ export function AccountSidebar({
                   aria-pressed={selected}
                 >
                   <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full shadow-sm ring-1 ring-black/5"
+                    className="relative h-2.5 w-2.5 shrink-0 rounded-full shadow-sm ring-1 ring-black/5"
                     style={{ backgroundColor: accountColor(account, index) }}
-                  />
+                  >
+                    {hasNotes && (
+                      <span
+                        className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-[#6e8f7d] ring-1 ring-white"
+                        title="노트 있음"
+                      />
+                    )}
+                  </span>
                   <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#1d1d1f]">
                     {account.name}
                   </span>
@@ -210,6 +266,52 @@ export function AccountSidebar({
                     {counts.get(account.id) ?? 0}
                   </span>
                 </button>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    openNotes(account, index)
+                  }}
+                  title="계정 노트"
+                  className={`rounded-lg p-1.5 transition ${
+                    hasNotes
+                      ? 'text-[#6e8f7d] opacity-100'
+                      : 'text-[#86868b] opacity-0 group-hover:opacity-100 focus-visible:opacity-100'
+                  } hover:bg-white`}
+                >
+                  <StickyNote className="h-3.5 w-3.5" />
+                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      setContextMenu(null)
+                      setMenuAccountId((current) =>
+                        current === account.id ? null : account.id,
+                      )
+                    }}
+                    title="더보기"
+                    className="rounded-lg p-1.5 text-[#86868b] opacity-0 transition hover:bg-white group-hover:opacity-100 focus-visible:opacity-100"
+                  >
+                    <Ellipsis className="h-3.5 w-3.5" />
+                  </button>
+                  {menuAccountId === account.id && (
+                    <div
+                      ref={menuRef}
+                      className="absolute right-0 top-full z-30 mt-1 min-w-[120px] rounded-xl border border-black/[0.06] bg-white py-1 shadow-lg"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => openNotes(account, index)}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
+                      >
+                        <StickyNote className="h-3.5 w-3.5 text-[#86868b]" />
+                        노트 열기
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => startEdit(account, index)}
@@ -313,6 +415,32 @@ export function AccountSidebar({
         </div>
           )}
         </>
+      )}
+
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[120px] rounded-xl border border-black/[0.06] bg-white py-1 shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            type="button"
+            onClick={() => openNotes(contextMenu.account, contextMenu.index)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-[#1d1d1f] transition hover:bg-[#f5f5f7]"
+          >
+            <StickyNote className="h-3.5 w-3.5 text-[#86868b]" />
+            노트 열기
+          </button>
+        </div>
+      )}
+
+      {notesTarget && (
+        <AccountNotesModal
+          account={notesTarget.account}
+          accountIndex={notesTarget.index}
+          onClose={() => setNotesTarget(null)}
+          onSave={onSaveNotes}
+        />
       )}
     </aside>
   )

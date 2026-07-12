@@ -1,12 +1,18 @@
 import { useState, type FormEvent } from 'react'
 import { ArrowRight, LockKeyhole } from 'lucide-react'
 import { workspaceFromCode, type Workspace } from '../lib/workspace'
+import type { HookInput } from '../lib/hooks'
+import { QuickHookCapture } from './QuickHookCapture'
 
 interface WorkspaceGateProps {
   onEnter: (workspace: Workspace) => void
+  onQuickHookSave: (input: HookInput) => Promise<boolean>
 }
 
-export function WorkspaceGate({ onEnter }: WorkspaceGateProps) {
+export function WorkspaceGate({
+  onEnter,
+  onQuickHookSave,
+}: WorkspaceGateProps) {
   const [code, setCode] = useState('')
   const [error, setError] = useState(false)
   const [errorKey, setErrorKey] = useState(0)
@@ -27,12 +33,13 @@ export function WorkspaceGate({ onEnter }: WorkspaceGateProps) {
       <div className="pointer-events-none absolute -top-32 -left-24 h-80 w-80 rounded-full bg-rose-100/55 blur-3xl" />
       <div className="pointer-events-none absolute -right-20 -bottom-28 h-80 w-80 rounded-full bg-sky-100/60 blur-3xl" />
 
-      <section
-        key={errorKey}
-        className={`fade-in relative w-full max-w-sm rounded-[28px] bg-white/90 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.09)] ring-1 ring-black/[0.04] backdrop-blur-xl sm:p-9 ${
-          error ? 'workspace-shake' : ''
-        }`}
-      >
+      <div className="relative w-full max-w-sm space-y-4">
+        <section
+          key={errorKey}
+          className={`fade-in rounded-[28px] bg-white/90 p-7 shadow-[0_20px_60px_rgba(0,0,0,0.09)] ring-1 ring-black/[0.04] backdrop-blur-xl sm:p-9 ${
+            error ? 'workspace-shake' : ''
+          }`}
+        >
         <div className="mb-7 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1d1d1f] text-white shadow-sm">
           <LockKeyhole className="h-5 w-5" />
         </div>
@@ -97,7 +104,9 @@ export function WorkspaceGate({ onEnter }: WorkspaceGateProps) {
           <br />
           보안 로그인이 아닙니다.
         </p>
-      </section>
+        </section>
+        <QuickHookCapture variant="gate" onSave={onQuickHookSave} />
+      </div>
     </main>
   )
 }

@@ -20,7 +20,13 @@ export const IDEA_STATUSES: IdeaStatus[] = [
   '업로드 완료',
 ]
 
-export type ViewMode = 'calendar' | 'board' | 'placement'
+export type ViewMode = 'calendar' | 'board' | 'placement' | 'hooks'
+
+export type HookMediaKind =
+  | 'none'
+  | 'image'
+  | 'video_link'
+  | 'video_file'
 
 export interface Category {
   id: string
@@ -57,9 +63,54 @@ export interface Account {
   workspace: import('../lib/workspace').Workspace
   name: string
   color: string | null
+  notes: string | null
   sort_order: number
   archived: boolean
   created_at: string
+}
+
+export interface ContentHook {
+  id: string
+  content: string
+  hook_type: string | null
+  media_kind: HookMediaKind
+  image_url: string | null
+  video_url: string | null
+  video_file_url: string | null
+  source_note: string | null
+  is_inbox: boolean
+  used_count: number
+  archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface HookType {
+  id: string
+  name: string
+  description: string | null
+  color: string | null
+  sort_order: number
+  created_at: string
+}
+
+export interface HookUsage {
+  id: string
+  hook_id: string
+  idea_id: string | null
+  rating: number | null
+  note: string | null
+  used_at: string
+}
+
+export interface HookUsageWithIdea extends HookUsage {
+  idea_title: string | null
+}
+
+export interface HookItem extends ContentHook {
+  account_ids: string[]
+  average_rating: number | null
+  usage_count: number
 }
 
 export interface AppMeta {

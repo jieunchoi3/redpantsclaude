@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import type { Plugin } from 'vite'
 import type { IncomingMessage } from 'node:http'
+import {
+  generateWithGemini,
+  type GeminiImageInput,
+} from './api/geminiShared.js'
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -33,7 +37,10 @@ function geminiDevApiPlugin(apiKey: string | undefined): Plugin {
 
         try {
           const raw = await readBody(req)
-          const body = JSON.parse(raw || '{}') as { prompt?: string }
+          const body = JSON.parse(raw || '{}') as {
+            prompt?: string
+            image?: GeminiImageInput & { mimeType?: string }
+          }
           const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
           if (!prompt) {
             res.statusCode = 400
@@ -42,41 +49,50 @@ function geminiDevApiPlugin(apiKey: string | undefined): Plugin {
             return
           }
 
-          const r = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-              }),
-            },
-          )
-          const data = (await r.json()) as {
-            candidates?: { content?: { parts?: { text?: string }[] } }[]
-            error?: { message?: string }
+          let image: GeminiImageInput | undefined
+          if (body.image && typeof body.image.data === 'string') {
+            const mime =
+              body.image.mime_type ??
+              (typeof body.image.mimeType === 'string'
+                ? body.image.mimeType
+                : '')
+            if (mime) {
+              image = { mime_type: mime, data: body.image.data }
+            }
           }
 
-          if (!r.ok) {
+          const result = await generateWithGemini(apiKey, { prompt, image })
+          if (!result.ok) {
             res.statusCode = 502
             res.setHeader('Content-Type', 'application/json')
             res.end(
               JSON.stringify({
-                error: data?.error?.message ?? 'Gemini request failed',
+                error: 'All Gemini model attempts failed',
+                attempts: result.attempts,
               }),
             )
             return
           }
 
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
           res.statusCode = 200
           res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ text }))
+          res.end(
+            JSON.stringify({
+              text: result.text,
+              model: result.model,
+              failed_attempts: result.failed_attempts,
+            }),
+          )
         } catch (err) {
           console.error('[gemini-dev]', err)
           res.statusCode = 500
           res.setHeader('Content-Type', 'application/json')
-          res.end(JSON.stringify({ error: 'Gemini proxy error' }))
+          res.end(
+            JSON.stringify({
+              error: 'Gemini proxy error',
+              detail: err instanceof Error ? err.message : String(err),
+            }),
+          )
         }
       })
     },

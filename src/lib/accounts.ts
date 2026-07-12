@@ -62,7 +62,9 @@ export async function createAccount(
 export async function updateAccount(
   workspace: Workspace,
   id: string,
-  patch: Partial<Pick<Account, 'name' | 'color' | 'sort_order' | 'archived'>>,
+  patch: Partial<
+    Pick<Account, 'name' | 'color' | 'sort_order' | 'archived' | 'notes'>
+  >,
 ): Promise<Account | null> {
   const sb = getSupabase()
   if (!sb) return null
@@ -80,4 +82,29 @@ export async function updateAccount(
     return null
   }
   return data as Account
+}
+
+export function flushAccountNotes(accountId: string, notes: string) {
+  const sbUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+  const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
+  if (!sbUrl || !sbKey) return
+
+  void fetch(`${sbUrl}/rest/v1/cp_accounts?id=eq.${accountId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: sbKey,
+      Authorization: `Bearer ${sbKey}`,
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify({
+      notes,
+      updated_at: new Date().toISOString(),
+    }),
+    keepalive: true,
+  })
+}
+
+export function accountHasNotes(account: Account): boolean {
+  return Boolean(account.notes?.trim())
 }

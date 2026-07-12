@@ -16,6 +16,8 @@ import { IdeaDetailPanel } from './components/IdeaDetailPanel'
 import { CategoryManager } from './components/CategoryManager'
 import { TrashPanel } from './components/TrashPanel'
 import { WeeklyGoalBar } from './components/WeeklyGoalBar'
+import { HookLibrary } from './components/HookLibrary'
+import { QuickHookCapture } from './components/QuickHookCapture'
 import {
   BoardSkeleton,
   LoadingSkeleton,
@@ -24,6 +26,7 @@ import {
 import { SmartSearchBar } from './components/SmartSearchBar'
 import { Toast, useToast } from './components/Toast'
 import { usePlannerData } from './hooks/usePlannerData'
+import { useHookLibrary } from './hooks/useHookLibrary'
 import { useSmartSearch } from './hooks/useSmartSearch'
 import type { PlacementSuggestion } from './lib/autoPlace'
 import type { CalendarFilters } from './lib/calendarFilters'
@@ -42,6 +45,7 @@ const DEFAULT_FILTERS: CalendarFilters = {
 }
 
 export default function App() {
+  const hookLibrary = useHookLibrary()
   const [workspace, setWorkspace] = useState<Workspace | null>(() =>
     workspaceFromUrl(),
   )
@@ -65,7 +69,12 @@ export default function App() {
   }
 
   if (!workspace) {
-    return <WorkspaceGate onEnter={enterWorkspace} />
+    return (
+      <WorkspaceGate
+        onEnter={enterWorkspace}
+        onQuickHookSave={hookLibrary.addHook}
+      />
+    )
   }
 
   return (
@@ -73,6 +82,7 @@ export default function App() {
       key={workspace}
       workspace={workspace}
       onExitWorkspace={exitWorkspace}
+      hookLibrary={hookLibrary}
     />
   )
 }
@@ -80,9 +90,11 @@ export default function App() {
 function PlannerApp({
   workspace,
   onExitWorkspace,
+  hookLibrary,
 }: {
   workspace: Workspace
   onExitWorkspace: () => void
+  hookLibrary: ReturnType<typeof useHookLibrary>
 }) {
   const [view, setView] = useState<ViewMode>('board')
   const [month, setMonth] = useState(() => new Date())
@@ -116,9 +128,9 @@ function PlannerApp({
     patchGoals,
     addAccount,
     patchAccount,
+    patchAccountNotes,
     archiveAccount,
   } = usePlannerData(workspace)
-
   const visibleIdeas = useMemo(
     () =>
       workspace === 'jieun' && selectedAccountIds.length > 0
@@ -196,6 +208,7 @@ function PlannerApp({
           onClear={() => setSelectedAccountIds([])}
           onAdd={addAccount}
           onUpdate={patchAccount}
+          onSaveNotes={patchAccountNotes}
           onArchive={async (id) => {
             const archived = await archiveAccount(id)
             if (archived) {
@@ -288,7 +301,22 @@ function PlannerApp({
             key={`${view}-${workspace === 'jieun' ? jieunCalendarMode : 'default'}`}
             className="fade-in transition-opacity duration-200"
           >
-            {loading ? (
+            {view === 'hooks' ? (
+              <HookLibrary
+                hooks={hookLibrary.hooks}
+                types={hookLibrary.hookTypes}
+                accounts={hookLibrary.hookAccounts}
+                loading={hookLibrary.loading}
+                error={hookLibrary.error}
+                onAdd={hookLibrary.addHook}
+                onUpdate={hookLibrary.patchHook}
+                onArchive={hookLibrary.archiveHook}
+                onRestore={hookLibrary.restoreHook}
+                onAddType={hookLibrary.addHookType}
+                onUpdateType={hookLibrary.patchHookType}
+                onDeleteType={hookLibrary.removeHookType}
+              />
+            ) : loading ? (
               view === 'board' ? (
                 <BoardSkeleton />
               ) : workspace === 'jieun' &&
@@ -388,6 +416,13 @@ function PlannerApp({
             setCategoryAccountId(accountId ?? null)
             setShowCategories(true)
           }}
+          hooks={hookLibrary.hooks}
+          hookTypes={hookLibrary.hookTypes}
+          hookAccounts={hookLibrary.hookAccounts}
+          hookUsages={hookLibrary.usages}
+          hooksLoading={hookLibrary.loading}
+          onApplyHook={hookLibrary.applyHookToIdea}
+          onUpdateHookUsage={hookLibrary.patchHookUsage}
         />
       )}
 
@@ -417,6 +452,7 @@ function PlannerApp({
         />
       )}
 
+      <QuickHookCapture variant="floating" onSave={hookLibrary.addHook} />
       <Toast message={toast.message} onClear={toast.clear} />
     </div>
   )
