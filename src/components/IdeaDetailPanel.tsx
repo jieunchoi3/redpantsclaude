@@ -14,8 +14,9 @@ import type {
   IgFormat,
   JieunChannel,
   JieunFormat,
+  HookAngle,
   HookItem,
-  HookType,
+  HookMedium,
   HookUsage,
   YtFormat,
 } from '../types'
@@ -33,7 +34,8 @@ interface IdeaDetailPanelProps {
   onArchive: (id: string) => Promise<unknown>
   onOpenCategoryManager: (accountId?: string | null) => void
   hooks: HookItem[]
-  hookTypes: HookType[]
+  hookMediums: HookMedium[]
+  hookAngles: HookAngle[]
   hookAccounts: Account[]
   hookUsages: HookUsage[]
   hooksLoading: boolean
@@ -58,7 +60,8 @@ export function IdeaDetailPanel({
   onArchive,
   onOpenCategoryManager,
   hooks,
-  hookTypes,
+  hookMediums,
+  hookAngles,
   hookAccounts,
   hookUsages,
   hooksLoading,
@@ -435,7 +438,8 @@ export function IdeaDetailPanel({
             }
             context={hookContext}
             hooks={hooks}
-            types={hookTypes}
+            mediums={hookMediums}
+            angles={hookAngles}
             accounts={hookAccounts}
             usages={hookUsages}
             loading={hooksLoading}

@@ -1,4 +1,4 @@
-import type { Account, HookType } from '../types'
+import type { Account, HookAngle, HookMedium } from '../types'
 import { accountColor } from './accounts'
 
 const DEFAULT_TYPE_COLOR = '#bca8af'
@@ -15,13 +15,27 @@ export function withAlpha(color: string, alpha: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`
 }
 
-export function hookTypeBadgeStyle(type?: HookType | null) {
-  const color = type?.color ?? DEFAULT_TYPE_COLOR
+export function hookAngleBadgeStyle(angle?: HookAngle | null) {
+  const color = angle?.color ?? DEFAULT_TYPE_COLOR
   return {
-    color: type?.color ?? DEFAULT_TYPE_TEXT,
-    backgroundColor: withAlpha(color, 0.16),
-    boxShadow: `inset 0 0 0 1px ${withAlpha(color, 0.22)}`,
+    color: angle?.color ?? DEFAULT_TYPE_TEXT,
+    backgroundColor: withAlpha(color, 0.2),
+    boxShadow: `inset 0 0 0 1px ${withAlpha(color, 0.28)}`,
   } as const
+}
+
+export function hookMediumBadgeStyle(medium?: HookMedium | null) {
+  const color = medium?.color ?? '#8e8e93'
+  return {
+    color: '#4d4d50',
+    backgroundColor: 'transparent',
+    boxShadow: `inset 0 0 0 1.5px ${withAlpha(color, 0.55)}`,
+  } as const
+}
+
+/** @deprecated Use hookAngleBadgeStyle */
+export function hookTypeBadgeStyle(type?: HookAngle | null) {
+  return hookAngleBadgeStyle(type)
 }
 
 export function accountChipStyle(account: Account, index: number) {

@@ -322,7 +322,8 @@ function PlannerApp({
             {view === 'hooks' ? (
               <HookLibrary
                 hooks={hookLibrary.hooks}
-                types={hookLibrary.hookTypes}
+                mediums={hookLibrary.hookMediums}
+                angles={hookLibrary.hookAngles}
                 accounts={hookLibrary.hookAccounts}
                 loading={hookLibrary.loading}
                 error={hookLibrary.error}
@@ -331,9 +332,12 @@ function PlannerApp({
                 onUpdate={hookLibrary.patchHook}
                 onArchive={hookLibrary.archiveHook}
                 onRestore={hookLibrary.restoreHook}
-                onAddType={hookLibrary.addHookType}
-                onUpdateType={hookLibrary.patchHookType}
-                onDeleteType={hookLibrary.removeHookType}
+                onAddMedium={hookLibrary.addHookMedium}
+                onUpdateMedium={hookLibrary.patchHookMedium}
+                onDeleteMedium={hookLibrary.removeHookMedium}
+                onAddAngle={hookLibrary.addHookAngle}
+                onUpdateAngle={hookLibrary.patchHookAngle}
+                onDeleteAngle={hookLibrary.removeHookAngle}
               />
             ) : loading ? (
               view === 'board' ? (
@@ -442,7 +446,8 @@ function PlannerApp({
             setShowCategories(true)
           }}
           hooks={hookLibrary.hooks}
-          hookTypes={hookLibrary.hookTypes}
+          hookMediums={hookLibrary.hookMediums}
+          hookAngles={hookLibrary.hookAngles}
           hookAccounts={hookLibrary.hookAccounts}
           hookUsages={hookLibrary.usages}
           hooksLoading={hookLibrary.loading}

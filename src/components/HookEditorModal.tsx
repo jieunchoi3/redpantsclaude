@@ -1,79 +1,84 @@
-import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
+import { useEffect, useMemo, useState, type ClipboardEvent } from 'react'
 import {
   Check,
-  ChevronDown,
   ImagePlus,
   Loader2,
-  Pencil,
-  Plus,
   Sparkles,
-  Trash2,
   Upload,
   X,
 } from 'lucide-react'
 import { accountColor } from '../lib/accounts'
 import { GeminiApiError } from '../lib/gemini'
 import {
-  classifyHookType,
+  classifyHookTaxonomy,
   generateHookVariations,
   type HookVariationContext,
 } from '../lib/hookAi'
 import { uploadHookMedia } from '../lib/storage'
 import type {
   Account,
+  HookAngle,
   HookItem,
   HookMediaKind,
-  HookType,
+  HookMedium,
 } from '../types'
 import type { HookInput } from '../lib/hooks'
-import { hookTypeBadgeStyle } from '../lib/hookUi'
+import { HookAxisMultiSelect } from './HookAxisMultiSelect'
 import { HookImageExtractPanel } from './HookImageExtractPanel'
-
-const TYPE_COLORS = [
-  '#D9A6AF',
-  '#A8BFD8',
-  '#B6AED5',
-  '#A9C8B9',
-  '#DCC08C',
-  '#C4AD9D',
-]
+import { HookTaxonomyInlineManager } from './HookTaxonomyInlineManager'
 
 interface HookEditorModalProps {
   hook: HookItem | null
-  types: HookType[]
+  mediums: HookMedium[]
+  angles: HookAngle[]
   accounts: Account[]
   existingHooks: HookItem[]
   onClose: () => void
   onSave: (input: HookInput) => Promise<boolean>
   onCreateHooks: (inputs: HookInput[]) => Promise<number>
-  onAddType: (input: {
+  onAddMedium: (input: {
     name: string
     description?: string | null
     color?: string | null
-  }) => Promise<HookType | null>
-  onUpdateType: (
+  }) => Promise<HookMedium | null>
+  onUpdateMedium: (
     id: string,
-    patch: Pick<HookType, 'name' | 'description' | 'color'>,
+    patch: Pick<HookMedium, 'name' | 'description' | 'color'>,
   ) => Promise<boolean>
-  onDeleteType: (id: string) => Promise<boolean>
+  onDeleteMedium: (id: string) => Promise<boolean>
+  onAddAngle: (input: {
+    name: string
+    description?: string | null
+    color?: string | null
+  }) => Promise<HookAngle | null>
+  onUpdateAngle: (
+    id: string,
+    patch: Pick<HookAngle, 'name' | 'description' | 'color'>,
+  ) => Promise<boolean>
+  onDeleteAngle: (id: string) => Promise<boolean>
   variationContext?: HookVariationContext
 }
 
 export function HookEditorModal({
   hook,
-  types,
+  mediums,
+  angles,
   accounts,
   existingHooks,
   onClose,
   onSave,
   onCreateHooks,
-  onAddType,
-  onUpdateType,
-  onDeleteType,
+  onAddMedium,
+  onUpdateMedium,
+  onDeleteMedium,
+  onAddAngle,
+  onUpdateAngle,
+  onDeleteAngle,
   variationContext,
 }: HookEditorModalProps) {
   const [content, setContent] = useState(hook?.content ?? '')
-  const [hookType, setHookType] = useState(hook?.hook_type ?? '')
+  const [mediumIds, setMediumIds] = useState<string[]>(hook?.medium_ids ?? [])
+  const [angleIds, setAngleIds] = useState<string[]>(hook?.angle_ids ?? [])
   const [accountIds, setAccountIds] = useState<string[]>(
     hook?.account_ids ?? [],
   )
@@ -90,34 +95,28 @@ export function HookEditorModal({
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showTypeManager, setShowTypeManager] = useState(false)
+  const [showMediumManager, setShowMediumManager] = useState(false)
+  const [showAngleManager, setShowAngleManager] = useState(false)
   const [classifying, setClassifying] = useState(false)
   const [variating, setVariating] = useState(false)
   const [variations, setVariations] = useState<string[]>([])
-  const [typeMenuOpen, setTypeMenuOpen] = useState(false)
-  const typeMenuRef = useRef<HTMLDivElement | null>(null)
-
-  const selectedType = useMemo(
-    () => types.find((type) => type.id === hookType),
-    [hookType, types],
-  )
 
   useEffect(() => {
-    if (!typeMenuOpen) return
-    function onPointerDown(event: MouseEvent) {
-      if (typeMenuRef.current?.contains(event.target as Node)) return
-      setTypeMenuOpen(false)
-    }
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setTypeMenuOpen(false)
-    }
-    window.addEventListener('mousedown', onPointerDown)
-    window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('mousedown', onPointerDown)
-      window.removeEventListener('keydown', onKeyDown)
-    }
-  }, [typeMenuOpen])
+    setContent(hook?.content ?? '')
+    setMediumIds(hook?.medium_ids ?? [])
+    setAngleIds(hook?.angle_ids ?? [])
+    setAccountIds(hook?.account_ids ?? [])
+    setMediaKind(hook?.media_kind ?? 'none')
+    setImageUrl(hook?.image_url ?? '')
+    setImageFile(null)
+    setVideoUrl(hook?.video_url ?? '')
+    setVideoFileUrl(hook?.video_file_url ?? '')
+    setSourceNote(hook?.source_note ?? '')
+    setShowMediumManager(false)
+    setShowAngleManager(false)
+    setVariations([])
+    setError(null)
+  }, [hook])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -152,7 +151,7 @@ export function HookEditorModal({
     const url = await uploadHookMedia(file)
     setUploading(false)
     if (!url) {
-      setError('미디어 업로드에 실패했어요. Storage 설정을 확인해 주세요.')
+      setError('첨부 파일 업로드에 실패했어요. Storage 설정을 확인해 주세요.')
       return
     }
     setMediaKind(kind)
@@ -194,7 +193,8 @@ export function HookEditorModal({
     setError(null)
     const ok = await onSave({
       content: content.trim(),
-      hook_type: hookType || null,
+      medium_ids: mediumIds,
+      angle_ids: angleIds,
       media_kind: mediaKind,
       image_url: mediaKind === 'image' ? imageUrl || null : null,
       video_url: mediaKind === 'video_link' ? videoUrl || null : null,
@@ -202,7 +202,9 @@ export function HookEditorModal({
         mediaKind === 'video_file' ? videoFileUrl || null : null,
       source_note: sourceNote.trim() || null,
       is_inbox: hook?.is_inbox
-        ? !hookType && accountIds.length === 0
+        ? mediumIds.length === 0 &&
+          angleIds.length === 0 &&
+          accountIds.length === 0
         : false,
       account_ids: accountIds,
     })
@@ -216,24 +218,29 @@ export function HookEditorModal({
       setError('분류할 훅 내용을 먼저 입력해 주세요.')
       return
     }
-    if (types.length === 0) {
-      setError('등록된 훅 유형이 없어요.')
+    if (mediums.length === 0 && angles.length === 0) {
+      setError('등록된 매체·앵글이 없어요. 분류 관리에서 추가해 주세요.')
       return
     }
     setClassifying(true)
     setError(null)
     try {
-      const matched = await classifyHookType(content, types)
-      if (!matched) {
-        setError('AI가 맞는 유형을 찾지 못했어요. 직접 선택해 주세요.')
+      const matched = await classifyHookTaxonomy(content, mediums, angles)
+      if (matched.mediums.length === 0 && matched.angles.length === 0) {
+        setError('AI가 맞는 매체·앵글을 찾지 못했어요. 직접 선택해 주세요.')
         return
       }
-      setHookType(matched.id)
+      if (matched.mediums.length > 0) {
+        setMediumIds(matched.mediums.map((medium) => medium.id))
+      }
+      if (matched.angles.length > 0) {
+        setAngleIds(matched.angles.map((angle) => angle.id))
+      }
     } catch (err) {
       setError(
         err instanceof GeminiApiError
           ? err.message
-          : 'AI 유형 분류에 실패했어요.',
+          : 'AI 분류에 실패했어요.',
       )
     } finally {
       setClassifying(false)
@@ -272,7 +279,8 @@ export function HookEditorModal({
     const count = await onCreateHooks([
       {
         content: variation,
-        hook_type: hookType || null,
+        medium_ids: mediumIds,
+        angle_ids: angleIds,
         media_kind: 'none',
         image_url: null,
         video_url: null,
@@ -321,7 +329,7 @@ export function HookEditorModal({
           <div className="space-y-6">
             {hook?.is_inbox && (
               <div className="rounded-2xl bg-[#fff7e8] px-4 py-3 text-[11px] leading-5 text-[#8a6a38] ring-1 ring-[#ead8b5]/55">
-                인박스에 저장된 미분류 훅이에요. 유형이나 적용 계정을 지정하면
+                인박스에 저장된 미분류 훅이에요. 매체·앵글·적용 계정을 지정하면
                 자동으로 정리 완료 처리됩니다.
               </div>
             )}
@@ -399,172 +407,80 @@ export function HookEditorModal({
               )}
             </label>
 
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-[13px] font-semibold text-[#3a3a3c]">
-                  훅 유형
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={classifying || !content.trim()}
-                    onClick={() => void handleAiClassify()}
-                    className="inline-flex items-center gap-1 rounded-full bg-[#f3f0f1] px-2.5 py-1 text-[11px] font-semibold text-[#6f5a62] transition hover:bg-[#ebe4e6] disabled:opacity-45"
-                  >
-                    {classifying ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3 w-3" />
-                    )}
-                    AI로 유형 분류
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowTypeManager((current) => !current)}
-                    className="inline-flex items-center gap-1 text-[12px] font-medium text-[#7c6870] transition hover:text-[#4c3f44]"
-                  >
-                    유형 관리
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 transition ${showTypeManager ? 'rotate-180' : ''}`}
-                    />
-                  </button>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[13px] font-semibold text-[#3a3a3c]">
+                    분류
+                  </span>
+                  <p className="mt-0.5 text-[11px] text-[#8e8e93]">
+                    매체와 앵글은 독립적으로 복수 선택할 수 있어요
+                  </p>
                 </div>
-              </div>
-              <div ref={typeMenuRef} className="relative">
                 <button
                   type="button"
-                  aria-haspopup="listbox"
-                  aria-expanded={typeMenuOpen}
-                  onClick={() => setTypeMenuOpen((current) => !current)}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${
-                    typeMenuOpen
-                      ? 'bg-white shadow-sm ring-2 ring-[#b49ba1]/35'
-                      : 'bg-white shadow-sm ring-1 ring-black/[0.05] hover:ring-black/[0.08]'
-                  }`}
+                  disabled={classifying || !content.trim()}
+                  onClick={() => void handleAiClassify()}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#f3f0f1] px-2.5 py-1.5 text-[11px] font-semibold text-[#6f5a62] transition hover:bg-[#ebe4e6] disabled:opacity-45"
                 >
-                  {selectedType ? (
-                    <span
-                      className="inline-flex max-w-full items-center gap-2 truncate rounded-full px-3 py-1 text-[12px] font-semibold"
-                      style={hookTypeBadgeStyle(selectedType)}
-                    >
-                      <span
-                        className="h-2 w-2 shrink-0 rounded-full"
-                        style={{
-                          backgroundColor: selectedType.color ?? '#b8b8bd',
-                        }}
-                      />
-                      {selectedType.name}
-                    </span>
+                  {classifying ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
                   ) : (
-                    <span className="text-[14px] text-[#aeaeb2]">미지정</span>
+                    <Sparkles className="h-3 w-3" />
                   )}
-                  <ChevronDown
-                    className={`ml-auto h-4 w-4 shrink-0 text-[#aeaeb2] transition ${
-                      typeMenuOpen ? 'rotate-180' : ''
-                    }`}
-                  />
+                  AI 분류
                 </button>
+              </div>
 
-                {typeMenuOpen && (
-                  <ul
-                    role="listbox"
-                    className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 max-h-64 overflow-y-auto rounded-2xl bg-white p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06]"
-                  >
-                    <li>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={!hookType}
-                        onClick={() => {
-                          setHookType('')
-                          setTypeMenuOpen(false)
-                        }}
-                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] transition ${
-                          !hookType
-                            ? 'bg-[#f5f5f7] font-semibold text-[#1d1d1f]'
-                            : 'text-[#6e6e73] hover:bg-[#f7f7f8]'
-                        }`}
-                      >
-                        <span className="h-2.5 w-2.5 rounded-full bg-[#d1d1d6]" />
-                        <span className="flex-1">미지정</span>
-                        {!hookType && <Check className="h-3.5 w-3.5 opacity-70" />}
-                      </button>
-                    </li>
-                    {types.map((type) => {
-                      const active = hookType === type.id
-                      return (
-                        <li key={type.id}>
-                          <button
-                            type="button"
-                            role="option"
-                            aria-selected={active}
-                            onClick={() => {
-                              setHookType(type.id)
-                              setTypeMenuOpen(false)
-                            }}
-                            className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                              active
-                                ? 'bg-[#f5f5f7]'
-                                : 'hover:bg-[#f7f7f8]'
-                            }`}
-                          >
-                            <span
-                              className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/80"
-                              style={{
-                                backgroundColor: type.color ?? '#b8b8bd',
-                              }}
-                            />
-                            <span className="min-w-0 flex-1">
-                              <span
-                                className={`block truncate text-[13px] ${
-                                  active
-                                    ? 'font-semibold text-[#1d1d1f]'
-                                    : 'font-medium text-[#3a3a3c]'
-                                }`}
-                              >
-                                {type.name}
-                              </span>
-                              {type.description && (
-                                <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-[#8e8e93]">
-                                  {type.description}
-                                </span>
-                              )}
-                            </span>
-                            {active && (
-                              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
-                            )}
-                          </button>
-                        </li>
-                      )
-                    })}
-                    <li className="mt-1 border-t border-black/[0.05] pt-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTypeMenuOpen(false)
-                          setShowTypeManager(true)
-                        }}
-                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[12px] font-medium text-[#7c6870] transition hover:bg-[#f5f5f7]"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        유형 추가 및 관리
-                      </button>
-                    </li>
-                  </ul>
+              <div>
+                <HookAxisMultiSelect
+                  kind="medium"
+                  label="매체"
+                  hint="카드뉴스 커버 / 릴스 음성 / 릴스 시각 / 캡션 텍스트"
+                  items={mediums}
+                  selectedIds={mediumIds}
+                  onChange={setMediumIds}
+                  onManage={() =>
+                    setShowMediumManager((current) => !current)
+                  }
+                />
+                {showMediumManager && (
+                  <HookTaxonomyInlineManager
+                    axisLabel="매체"
+                    items={mediums}
+                    selectedIds={mediumIds}
+                    onAdd={onAddMedium}
+                    onUpdate={onUpdateMedium}
+                    onDelete={onDeleteMedium}
+                    onSelectionChange={(ids) => setMediumIds(ids)}
+                  />
                 )}
               </div>
-              {showTypeManager && (
-                <HookTypeManager
-                  types={types}
-                  onAdd={onAddType}
-                  onUpdate={onUpdateType}
-                  onDelete={async (id) => {
-                    const ok = await onDeleteType(id)
-                    if (ok && hookType === id) setHookType('')
-                    return ok
-                  }}
+
+              <div>
+                <HookAxisMultiSelect
+                  kind="angle"
+                  label="앵글"
+                  hint="시작형 / 정보성 / 비교형 / 긴급형 / 공감형 / 분노형"
+                  items={angles}
+                  selectedIds={angleIds}
+                  onChange={setAngleIds}
+                  onManage={() =>
+                    setShowAngleManager((current) => !current)
+                  }
                 />
-              )}
+                {showAngleManager && (
+                  <HookTaxonomyInlineManager
+                    axisLabel="앵글"
+                    items={angles}
+                    selectedIds={angleIds}
+                    onAdd={onAddAngle}
+                    onUpdate={onUpdateAngle}
+                    onDelete={onDeleteAngle}
+                    onSelectionChange={(ids) => setAngleIds(ids)}
+                  />
+                )}
+              </div>
             </div>
 
             <div>
@@ -622,7 +538,7 @@ export function HookEditorModal({
 
             <div>
               <span className="mb-2 block text-[13px] font-semibold text-[#3a3a3c]">
-                미디어
+                첨부
               </span>
               <div className="mb-3 flex flex-wrap gap-1 rounded-2xl bg-[#ebebee] p-1">
                 {(
@@ -663,12 +579,15 @@ export function HookEditorModal({
                       <HookImageExtractPanel
                         imageFile={imageFile}
                         imageUrl={imageUrl}
-                        types={types}
+                        mediums={mediums}
+                        angles={angles}
                         existingHooks={existingHooks}
-                        defaultHookTypeId={hookType}
+                        defaultMediumIds={mediumIds}
+                        defaultAngleIds={angleIds}
                         defaultAccountIds={accountIds}
                         defaultSourceNote={sourceNote}
-                        onSuggestedType={setHookType}
+                        onSuggestedMediums={setMediumIds}
+                        onSuggestedAngles={setAngleIds}
                         onCreateHooks={onCreateHooks}
                         onDone={onClose}
                       />
@@ -774,7 +693,7 @@ function MediaUploadBox({
             type="button"
             onClick={onClear}
             className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-white backdrop-blur transition hover:bg-black/70"
-            aria-label="미디어 제거"
+            aria-label="첨부 제거"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -805,155 +724,6 @@ function MediaUploadBox({
             }}
           />
         </label>
-      )}
-    </div>
-  )
-}
-
-function HookTypeManager({
-  types,
-  onAdd,
-  onUpdate,
-  onDelete,
-}: {
-  types: HookType[]
-  onAdd: HookEditorModalProps['onAddType']
-  onUpdate: HookEditorModalProps['onUpdateType']
-  onDelete: HookEditorModalProps['onDeleteType']
-}) {
-  const [editingId, setEditingId] = useState<string | 'new' | null>(null)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [color, setColor] = useState(TYPE_COLORS[0]!)
-  const [busy, setBusy] = useState(false)
-
-  function startEdit(type?: HookType) {
-    setEditingId(type?.id ?? 'new')
-    setName(type?.name ?? '')
-    setDescription(type?.description ?? '')
-    setColor(type?.color ?? TYPE_COLORS[types.length % TYPE_COLORS.length]!)
-  }
-
-  async function save() {
-    if (!name.trim()) return
-    setBusy(true)
-    if (editingId === 'new') {
-      await onAdd({
-        name: name.trim(),
-        description: description.trim() || null,
-        color,
-      })
-    } else if (editingId) {
-      await onUpdate(editingId, {
-        name: name.trim(),
-        description: description.trim() || null,
-        color,
-      })
-    }
-    setBusy(false)
-    setEditingId(null)
-  }
-
-  return (
-    <div className="mt-3 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/[0.05]">
-      <div className="space-y-1">
-        {types.map((type) => (
-          <div
-            key={type.id}
-            className="group flex items-start gap-2 rounded-xl px-2.5 py-2 transition hover:bg-[#f7f7f9]"
-          >
-            <span
-              className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: type.color ?? '#b8b8bd' }}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-[12px] font-medium text-[#3a3a3c]">
-                {type.name}
-              </p>
-              {type.description && (
-                <p className="mt-0.5 text-[10px] leading-4 text-[#8e8e93]">
-                  {type.description}
-                </p>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => startEdit(type)}
-              className="rounded-lg p-1.5 text-[#9a9a9f] opacity-0 transition hover:bg-white hover:text-[#4d4d50] group-hover:opacity-100"
-              aria-label={`${type.name} 편집`}
-            >
-              <Pencil className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `"${type.name}" 유형을 삭제할까요? 기존 훅은 유형 미지정으로 바뀝니다.`,
-                  )
-                ) {
-                  void onDelete(type.id)
-                }
-              }}
-              className="rounded-lg p-1.5 text-[#b7a3a6] opacity-0 transition hover:bg-[#fff0f1] hover:text-[#bd5364] group-hover:opacity-100"
-              aria-label={`${type.name} 삭제`}
-            >
-              <Trash2 className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {editingId ? (
-        <div className="mt-3 space-y-2 border-t border-black/[0.06] pt-3">
-          <div className="flex gap-2">
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="유형 이름"
-              className="min-w-0 flex-1 rounded-xl bg-[#f5f5f7] px-3 py-2 text-[12px] outline-none"
-            />
-            <input
-              type="color"
-              value={color}
-              onChange={(event) => setColor(event.target.value)}
-              className="h-9 w-10 cursor-pointer rounded-lg border-0 bg-transparent"
-              aria-label="유형 색상"
-            />
-          </div>
-          <input
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="이 유형에 대한 설명"
-            className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2 text-[12px] outline-none"
-          />
-          <div className="flex justify-end gap-1.5">
-            <button
-              type="button"
-              onClick={() => setEditingId(null)}
-              className="rounded-lg px-2.5 py-1.5 text-[11px] text-[#77777c]"
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              disabled={busy || !name.trim()}
-              onClick={() => void save()}
-              className="rounded-lg bg-[#1d1d1f] px-3 py-1.5 text-[11px] font-medium text-white disabled:opacity-40"
-            >
-              저장
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => startEdit()}
-          className="mt-2 inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-[#7c6870] transition hover:bg-[#f5f5f7]"
-        >
-          <Plus className="h-3 w-3" />
-          새 유형
-        </button>
       )}
     </div>
   )

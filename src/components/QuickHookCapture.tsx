@@ -59,7 +59,8 @@ export function QuickHookCapture({
     setError(null)
     const ok = await onSave({
       content: content.trim(),
-      hook_type: null,
+      medium_ids: [],
+      angle_ids: [],
       media_kind: imageUrl ? 'image' : 'none',
       image_url: imageUrl || null,
       video_url: null,

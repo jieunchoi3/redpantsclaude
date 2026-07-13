@@ -4,21 +4,24 @@ import { GeminiApiError } from '../lib/gemini'
 import {
   extractHooksFromImage,
   imageSourceToBase64,
-  resolveHookTypeId,
   type ExtractedPhrase,
 } from '../lib/hookImageExtract'
 import type { HookInput } from '../lib/hooks'
-import type { HookItem, HookType } from '../types'
+import type { HookAngle, HookItem, HookMedium } from '../types'
+import { HookAxisMultiSelect } from './HookAxisMultiSelect'
 
 interface HookImageExtractPanelProps {
   imageFile: File | null
   imageUrl: string | null
-  types: HookType[]
+  mediums: HookMedium[]
+  angles: HookAngle[]
   existingHooks: HookItem[]
-  defaultHookTypeId: string
+  defaultMediumIds: string[]
+  defaultAngleIds: string[]
   defaultAccountIds: string[]
   defaultSourceNote: string
-  onSuggestedType: (typeId: string) => void
+  onSuggestedMediums: (ids: string[]) => void
+  onSuggestedAngles: (ids: string[]) => void
   onCreateHooks: (inputs: HookInput[]) => Promise<number>
   onDone: () => void
 }
@@ -26,12 +29,15 @@ interface HookImageExtractPanelProps {
 export function HookImageExtractPanel({
   imageFile,
   imageUrl,
-  types,
+  mediums,
+  angles,
   existingHooks,
-  defaultHookTypeId,
+  defaultMediumIds,
+  defaultAngleIds,
   defaultAccountIds,
   defaultSourceNote,
-  onSuggestedType,
+  onSuggestedMediums,
+  onSuggestedAngles,
   onCreateHooks,
   onDone,
 }: HookImageExtractPanelProps) {
@@ -39,7 +45,8 @@ export function HookImageExtractPanel({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [phrases, setPhrases] = useState<ExtractedPhrase[]>([])
-  const [suggestedTypeId, setSuggestedTypeId] = useState(defaultHookTypeId)
+  const [mediumIds, setMediumIds] = useState(defaultMediumIds)
+  const [angleIds, setAngleIds] = useState(defaultAngleIds)
   const [hasExtracted, setHasExtracted] = useState(false)
 
   const existingContents = useMemo(
@@ -68,7 +75,8 @@ export function HookImageExtractPanel({
 
       const result = await extractHooksFromImage(
         image,
-        types,
+        mediums,
+        angles,
         existingContents,
       )
       setPhrases(result.phrases)
@@ -79,10 +87,15 @@ export function HookImageExtractPanel({
         return
       }
 
-      const typeId = resolveHookTypeId(result.suggestedTypeName, types)
-      if (typeId) {
-        setSuggestedTypeId(typeId)
-        onSuggestedType(typeId)
+      if (result.suggestedMediums.length > 0) {
+        const ids = result.suggestedMediums.map((medium) => medium.id)
+        setMediumIds(ids)
+        onSuggestedMediums(ids)
+      }
+      if (result.suggestedAngles.length > 0) {
+        const ids = result.suggestedAngles.map((angle) => angle.id)
+        setAngleIds(ids)
+        onSuggestedAngles(ids)
       }
     } catch (err) {
       setError(
@@ -110,7 +123,8 @@ export function HookImageExtractPanel({
     setError(null)
     const inputs: HookInput[] = selected.map((phrase) => ({
       content: phrase.text.trim(),
-      hook_type: suggestedTypeId || null,
+      medium_ids: mediumIds,
+      angle_ids: angleIds,
       media_kind: imageUrl ? 'image' : 'none',
       image_url: imageUrl,
       video_url: null,
@@ -175,26 +189,26 @@ export function HookImageExtractPanel({
 
       {hasExtracted && phrases.length > 0 && (
         <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-medium text-[#6e6e73]">
-              추천 훅 유형
-            </span>
-            <select
-              value={suggestedTypeId}
-              onChange={(event) => {
-                setSuggestedTypeId(event.target.value)
-                onSuggestedType(event.target.value)
-              }}
-              className="w-full rounded-xl bg-[#f5f5f7] px-3 py-2 text-[12px] outline-none ring-1 ring-black/[0.04]"
-            >
-              <option value="">미지정</option>
-              {types.map((type) => (
-                <option key={type.id} value={type.id}>
-                  {type.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <HookAxisMultiSelect
+            kind="medium"
+            label="추천 매체"
+            items={mediums}
+            selectedIds={mediumIds}
+            onChange={(ids) => {
+              setMediumIds(ids)
+              onSuggestedMediums(ids)
+            }}
+          />
+          <HookAxisMultiSelect
+            kind="angle"
+            label="추천 앵글"
+            items={angles}
+            selectedIds={angleIds}
+            onChange={(ids) => {
+              setAngleIds(ids)
+              onSuggestedAngles(ids)
+            }}
+          />
 
           <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-xl bg-[#f7f7f9] p-2">
             {phrases.map((phrase, index) => (

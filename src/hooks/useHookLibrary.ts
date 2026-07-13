@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { HookItem, HookType, HookUsage } from '../types'
+import type { HookAngle, HookItem, HookMedium, HookUsage } from '../types'
 import {
   createHook,
-  createHookType,
-  deleteHookType,
+  createHookAngle,
+  createHookMedium,
+  deleteHookAngle,
+  deleteHookMedium,
   fetchHookLibrary,
   recordHookUsage,
   setHookArchived,
   updateHook,
-  updateHookType,
+  updateHookAngle,
+  updateHookMedium,
   updateHookUsage,
   type HookInput,
 } from '../lib/hooks'
 
 export function useHookLibrary() {
   const [hooks, setHooks] = useState<HookItem[]>([])
-  const [hookTypes, setHookTypes] = useState<HookType[]>([])
+  const [hookMediums, setHookMediums] = useState<HookMedium[]>([])
+  const [hookAngles, setHookAngles] = useState<HookAngle[]>([])
   const [hookAccounts, setHookAccounts] = useState<
     Awaited<ReturnType<typeof fetchHookLibrary>>['accounts']
   >([])
@@ -30,7 +34,8 @@ export function useHookLibrary() {
     setLoading(true)
     const data = await fetchHookLibrary()
     setHooks(data.hooks)
-    setHookTypes(data.types)
+    setHookMediums(data.mediums)
+    setHookAngles(data.angles)
     setHookAccounts(data.accounts)
     setUsages(data.usages)
     setError(data.error)
@@ -80,40 +85,81 @@ export function useHookLibrary() {
     return ok
   }
 
-  async function addHookType(input: {
+  async function addHookMedium(input: {
     name: string
     description?: string | null
     color?: string | null
   }) {
-    const created = await createHookType({
+    const created = await createHookMedium({
       ...input,
-      sort_order: hookTypes.length + 1,
+      sort_order: hookMediums.length + 1,
     })
     if (!created) return null
-    setHookTypes((current) => [...current, created])
+    setHookMediums((current) => [...current, created])
     return created
   }
 
-  async function patchHookType(
+  async function patchHookMedium(
     id: string,
-    patch: Pick<HookType, 'name' | 'description' | 'color'>,
+    patch: Pick<HookMedium, 'name' | 'description' | 'color'>,
   ) {
-    const updated = await updateHookType(id, patch)
+    const updated = await updateHookMedium(id, patch)
     if (!updated) return false
-    setHookTypes((current) =>
-      current.map((type) => (type.id === id ? updated : type)),
+    setHookMediums((current) =>
+      current.map((medium) => (medium.id === id ? updated : medium)),
     )
     return true
   }
 
-  async function removeHookType(id: string) {
-    const ok = await deleteHookType(id)
+  async function removeHookMedium(id: string) {
+    const ok = await deleteHookMedium(id)
     if (ok) {
-      setHookTypes((current) => current.filter((type) => type.id !== id))
+      setHookMediums((current) => current.filter((medium) => medium.id !== id))
       setHooks((current) =>
-        current.map((hook) =>
-          hook.hook_type === id ? { ...hook, hook_type: null } : hook,
-        ),
+        current.map((hook) => ({
+          ...hook,
+          medium_ids: hook.medium_ids.filter((mediumId) => mediumId !== id),
+        })),
+      )
+    }
+    return ok
+  }
+
+  async function addHookAngle(input: {
+    name: string
+    description?: string | null
+    color?: string | null
+  }) {
+    const created = await createHookAngle({
+      ...input,
+      sort_order: hookAngles.length + 1,
+    })
+    if (!created) return null
+    setHookAngles((current) => [...current, created])
+    return created
+  }
+
+  async function patchHookAngle(
+    id: string,
+    patch: Pick<HookAngle, 'name' | 'description' | 'color'>,
+  ) {
+    const updated = await updateHookAngle(id, patch)
+    if (!updated) return false
+    setHookAngles((current) =>
+      current.map((angle) => (angle.id === id ? updated : angle)),
+    )
+    return true
+  }
+
+  async function removeHookAngle(id: string) {
+    const ok = await deleteHookAngle(id)
+    if (ok) {
+      setHookAngles((current) => current.filter((angle) => angle.id !== id))
+      setHooks((current) =>
+        current.map((hook) => ({
+          ...hook,
+          angle_ids: hook.angle_ids.filter((angleId) => angleId !== id),
+        })),
       )
     }
     return ok
@@ -151,7 +197,8 @@ export function useHookLibrary() {
 
   return {
     hooks,
-    hookTypes,
+    hookMediums,
+    hookAngles,
     hookAccounts,
     usages,
     loading,
@@ -161,9 +208,12 @@ export function useHookLibrary() {
     patchHook,
     archiveHook,
     restoreHook,
-    addHookType,
-    patchHookType,
-    removeHookType,
+    addHookMedium,
+    patchHookMedium,
+    removeHookMedium,
+    addHookAngle,
+    patchHookAngle,
+    removeHookAngle,
     applyHookToIdea,
     patchHookUsage,
   }

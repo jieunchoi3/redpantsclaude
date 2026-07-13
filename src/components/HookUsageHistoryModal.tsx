@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Loader2, Star, X } from 'lucide-react'
 import { fetchHookUsageHistory } from '../lib/hooks'
-import type { HookItem, HookType, HookUsageWithIdea } from '../types'
-import { HookTypeBadge } from './HookBadges'
+import type { HookAngle, HookItem, HookMedium, HookUsageWithIdea } from '../types'
+import { HookAngleBadge, HookMediumBadge } from './HookBadges'
 
 interface HookUsageHistoryModalProps {
   hook: HookItem
-  type?: HookType
+  mediums: HookMedium[]
+  angles: HookAngle[]
   onClose: () => void
 }
 
 export function HookUsageHistoryModal({
   hook,
-  type,
+  mediums,
+  angles,
   onClose,
 }: HookUsageHistoryModalProps) {
   const [history, setHistory] = useState<HookUsageWithIdea[]>([])
@@ -53,7 +55,12 @@ export function HookUsageHistoryModal({
               {hook.content}
             </h2>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[#8e8e93]">
-              {type && <HookTypeBadge type={type} className="px-2 py-0.5" />}
+              {mediums.map((medium) => (
+                <HookMediumBadge key={medium.id} medium={medium} className="px-2 py-0.5" />
+              ))}
+              {angles.map((angle) => (
+                <HookAngleBadge key={angle.id} angle={angle} className="px-2 py-0.5" />
+              ))}
               <span>총 {hook.usage_count}회 사용</span>
               <span className="inline-flex items-center gap-0.5">
                 <Star
@@ -72,54 +79,48 @@ export function HookUsageHistoryModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full bg-[#f2f2f4] p-2 text-[#6e6e73]"
+            className="rounded-full bg-[#f2f2f4] p-2 text-[#6e6e73] transition hover:bg-[#e8e8eb]"
             aria-label="닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </header>
 
-        <div className="overflow-y-auto px-5 py-4">
+        <div className="overflow-y-auto p-5">
           {loading ? (
             <div className="flex min-h-40 items-center justify-center">
               <Loader2 className="h-5 w-5 animate-spin text-[#9b8990]" />
             </div>
           ) : history.length === 0 ? (
             <p className="py-10 text-center text-[12px] text-[#8e8e93]">
-              아직 사용 기록이 없어요.
+              아직 사용 이력이 없어요.
             </p>
           ) : (
             <div className="space-y-2">
-              {history.map((row) => (
+              {history.map((entry) => (
                 <article
-                  key={row.id}
-                  className="rounded-2xl bg-white px-4 py-3 shadow-sm ring-1 ring-black/[0.04]"
+                  key={entry.id}
+                  className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/[0.04]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-[12px] font-semibold text-[#2c2c2e]">
-                        {row.idea_title || '삭제된 아이디어'}
+                      <p className="text-[13px] font-semibold text-[#2c2c2e]">
+                        {entry.idea_title ?? '아이디어 없음'}
                       </p>
-                      <p className="mt-0.5 text-[10px] text-[#8e8e93]">
-                        {formatUsedAt(row.used_at)}
+                      <p className="mt-1 text-[10px] text-[#8e8e93]">
+                        {new Date(entry.used_at).toLocaleString('ko-KR')}
                       </p>
                     </div>
-                    <div className="inline-flex items-center gap-0.5">
-                      {[1, 2, 3, 4, 5].map((value) => (
-                        <Star
-                          key={value}
-                          className={`h-3 w-3 ${
-                            row.rating !== null && value <= row.rating
-                              ? 'fill-[#d5b069] text-[#d5b069]'
-                              : 'text-[#d6d6da]'
-                          }`}
-                        />
-                      ))}
-                    </div>
+                    {entry.rating !== null && (
+                      <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#fff8eb] px-2 py-1 text-[10px] font-semibold text-[#8a672f]">
+                        <Star className="h-3 w-3 fill-[#d5b069] text-[#d5b069]" />
+                        {entry.rating}
+                      </span>
+                    )}
                   </div>
-                  {row.note && (
-                    <p className="mt-2 text-[11px] leading-4 text-[#6e6e73]">
-                      {row.note}
+                  {entry.note && (
+                    <p className="mt-2 text-[11px] leading-5 text-[#6e6e73]">
+                      {entry.note}
                     </p>
                   )}
                 </article>
@@ -130,16 +131,4 @@ export function HookUsageHistoryModal({
       </section>
     </div>
   )
-}
-
-function formatUsedAt(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('ko-KR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
 }

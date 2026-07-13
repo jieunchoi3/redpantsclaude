@@ -1,7 +1,7 @@
 import { Loader2, Palette, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { HookFetchDiagnostic } from '../lib/hooks'
-import type { HookItem, HookType } from '../types'
+import type { HookAngle, HookItem, HookMedium } from '../types'
 
 const DEFAULT_COLORS = [
   '#D9A6AF',
@@ -12,36 +12,54 @@ const DEFAULT_COLORS = [
   '#C4AD9D',
 ]
 
-interface HookTypeManagerModalProps {
-  types: HookType[]
+type TaxonomyTab = 'medium' | 'angle'
+
+interface HookTaxonomyManagerModalProps {
+  mediums: HookMedium[]
+  angles: HookAngle[]
   hooks: HookItem[]
   loading: boolean
   fetchError: string | null
   diagnostics: HookFetchDiagnostic[]
   onClose: () => void
-  onAdd: (input: {
+  onAddMedium: (input: {
     name: string
     description?: string | null
     color?: string | null
-  }) => Promise<HookType | null>
-  onUpdate: (
+  }) => Promise<HookMedium | null>
+  onUpdateMedium: (
     id: string,
-    patch: Pick<HookType, 'name' | 'description' | 'color'>,
+    patch: Pick<HookMedium, 'name' | 'description' | 'color'>,
   ) => Promise<boolean>
-  onDelete: (id: string) => Promise<boolean>
+  onDeleteMedium: (id: string) => Promise<boolean>
+  onAddAngle: (input: {
+    name: string
+    description?: string | null
+    color?: string | null
+  }) => Promise<HookAngle | null>
+  onUpdateAngle: (
+    id: string,
+    patch: Pick<HookAngle, 'name' | 'description' | 'color'>,
+  ) => Promise<boolean>
+  onDeleteAngle: (id: string) => Promise<boolean>
 }
 
-export function HookTypeManagerModal({
-  types,
+export function HookTaxonomyManagerModal({
+  mediums,
+  angles,
   hooks,
   loading,
   fetchError,
   diagnostics,
   onClose,
-  onAdd,
-  onUpdate,
-  onDelete,
-}: HookTypeManagerModalProps) {
+  onAddMedium,
+  onUpdateMedium,
+  onDeleteMedium,
+  onAddAngle,
+  onUpdateAngle,
+  onDeleteAngle,
+}: HookTaxonomyManagerModalProps) {
+  const [tab, setTab] = useState<TaxonomyTab>('medium')
   const [editingId, setEditingId] = useState<string | 'new' | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -49,21 +67,25 @@ export function HookTypeManagerModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const hookCountByType = useMemo(() => {
+  const items = tab === 'medium' ? mediums : angles
+  const hookCountById = useMemo(() => {
     const counts = new Map<string, number>()
     for (const hook of hooks) {
-      if (!hook.hook_type) continue
-      counts.set(hook.hook_type, (counts.get(hook.hook_type) ?? 0) + 1)
+      const ids = tab === 'medium' ? hook.medium_ids : hook.angle_ids
+      for (const id of ids) {
+        counts.set(id, (counts.get(id) ?? 0) + 1)
+      }
     }
     return counts
-  }, [hooks])
+  }, [hooks, tab])
 
-  function begin(type?: HookType) {
-    setEditingId(type?.id ?? 'new')
-    setName(type?.name ?? '')
-    setDescription(type?.description ?? '')
+  function begin(item?: HookMedium | HookAngle) {
+    setEditingId(item?.id ?? 'new')
+    setName(item?.name ?? '')
+    setDescription(item?.description ?? '')
     setColor(
-      type?.color ?? DEFAULT_COLORS[types.length % DEFAULT_COLORS.length]!,
+      item?.color ??
+        DEFAULT_COLORS[(tab === 'medium' ? mediums : angles).length % DEFAULT_COLORS.length]!,
     )
     setError(null)
   }
@@ -72,44 +94,47 @@ export function HookTypeManagerModal({
     if (!name.trim()) return
     setBusy(true)
     setError(null)
+    const input = {
+      name: name.trim(),
+      description: description.trim() || null,
+      color,
+    }
     const ok =
       editingId === 'new'
         ? Boolean(
-            await onAdd({
-              name: name.trim(),
-              description: description.trim() || null,
-              color,
-            }),
+            tab === 'medium' ? await onAddMedium(input) : await onAddAngle(input),
           )
         : editingId
-          ? await onUpdate(editingId, {
-              name: name.trim(),
-              description: description.trim() || null,
-              color,
-            })
+          ? tab === 'medium'
+            ? await onUpdateMedium(editingId, input)
+            : await onUpdateAngle(editingId, input)
           : false
     setBusy(false)
     if (ok) setEditingId(null)
-    else setError('유형을 저장하지 못했어요. 이름이 중복되지 않는지 확인해 주세요.')
+    else setError('저장하지 못했어요. 이름이 중복되지 않는지 확인해 주세요.')
   }
 
-  async function remove(type: HookType) {
-    const count = hookCountByType.get(type.id) ?? 0
+  async function remove(item: HookMedium | HookAngle) {
+    const count = hookCountById.get(item.id) ?? 0
+    const axisLabel = tab === 'medium' ? '매체' : '앵글'
     if (
       !window.confirm(
         count > 0
-          ? `"${type.name}" 유형을 삭제할까요? 이 유형을 사용 중인 훅 ${count}개는 미분류로 이동합니다.`
-          : `"${type.name}" 유형을 삭제할까요?`,
+          ? `"${item.name}" ${axisLabel}을(를) 삭제할까요? 이 분류를 쓰는 훅 ${count}개는 매핑만 해제됩니다.`
+          : `"${item.name}" ${axisLabel}을(를) 삭제할까요?`,
       )
     ) {
       return
     }
     setBusy(true)
     setError(null)
-    const ok = await onDelete(type.id)
+    const ok =
+      tab === 'medium'
+        ? await onDeleteMedium(item.id)
+        : await onDeleteAngle(item.id)
     setBusy(false)
-    if (!ok) setError('유형을 삭제하지 못했어요.')
-    if (ok && editingId === type.id) setEditingId(null)
+    if (!ok) setError('삭제하지 못했어요.')
+    if (ok && editingId === item.id) setEditingId(null)
   }
 
   return (
@@ -127,10 +152,10 @@ export function HookTypeManagerModal({
             </span>
             <div>
               <h2 className="text-[19px] font-semibold tracking-tight text-[#1d1d1f]">
-                훅 유형 관리
+                훅 분류 관리
               </h2>
               <p className="text-[11px] text-[#8e8e93]">
-                이름, 설명, 색상을 자유롭게 관리할 수 있어요
+                매체와 앵글을 독립적으로 관리할 수 있어요
               </p>
             </div>
           </div>
@@ -138,52 +163,85 @@ export function HookTypeManagerModal({
             type="button"
             onClick={onClose}
             className="rounded-full bg-[#f2f2f4] p-2 text-[#6e6e73] transition hover:bg-[#e8e8eb]"
-            aria-label="유형 관리 닫기"
+            aria-label="분류 관리 닫기"
           >
             <X className="h-4 w-4" />
           </button>
         </header>
 
+        <div className="border-b border-black/[0.06] bg-white/70 px-5 py-3">
+          <div className="flex rounded-xl bg-[#f5f5f7] p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setTab('medium')
+                setEditingId(null)
+              }}
+              className={`flex-1 rounded-lg px-3 py-2 text-[12px] font-semibold transition ${
+                tab === 'medium'
+                  ? 'bg-white text-[#1d1d1f] shadow-sm'
+                  : 'text-[#77777c]'
+              }`}
+            >
+              매체
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab('angle')
+                setEditingId(null)
+              }}
+              className={`flex-1 rounded-lg px-3 py-2 text-[12px] font-semibold transition ${
+                tab === 'angle'
+                  ? 'bg-white text-[#1d1d1f] shadow-sm'
+                  : 'text-[#77777c]'
+              }`}
+            >
+              앵글
+            </button>
+          </div>
+        </div>
+
         <div className="overflow-y-auto p-5 sm:p-6">
           <div className="space-y-2">
-            {types.map((type) => {
-              const count = hookCountByType.get(type.id) ?? 0
+            {items.map((item) => {
+              const count = hookCountById.get(item.id) ?? 0
               return (
                 <article
-                  key={type.id}
+                  key={item.id}
                   className="group flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/[0.035]"
                 >
                   <span
                     className="h-10 w-10 shrink-0 rounded-2xl ring-1 ring-black/[0.04]"
-                    style={{ backgroundColor: type.color ?? '#b8b8bd' }}
+                    style={{ backgroundColor: item.color ?? '#b8b8bd' }}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-[13px] font-semibold text-[#2c2c2e]">
-                        {type.name}
+                        {item.name}
                       </h3>
                       <span className="rounded-full bg-[#f2f2f4] px-2 py-0.5 text-[9px] font-medium text-[#8e8e93]">
                         훅 {count}개
                       </span>
                     </div>
                     <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-[#8e8e93]">
-                      {type.description || '설명 없음'}
+                      {item.description || '설명 없음'}
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => begin(type)}
+                    onClick={() => begin(item)}
                     className="rounded-xl bg-[#f5f5f7] p-2 text-[#77777c] transition hover:bg-[#e9e9ec] hover:text-[#1d1d1f]"
-                    aria-label={`${type.name} 편집`}
+                    aria-label={`${item.name} 편집`}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void remove(type)}
+                    onClick={() => void remove(item)}
                     className="rounded-xl bg-[#fff3f4] p-2 text-[#b7737e] transition hover:bg-[#ffe7ea] hover:text-[#a84353] disabled:opacity-40"
-                    aria-label={`${type.name} 삭제`}
+                    aria-label={`${item.name} 삭제`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -192,19 +250,19 @@ export function HookTypeManagerModal({
             })}
           </div>
 
-          {types.length === 0 && !editingId && (
+          {items.length === 0 && !editingId && (
             <div className="rounded-2xl border border-dashed border-black/10 bg-white/55 px-5 py-10 text-center">
               {loading ? (
                 <>
                   <Loader2 className="mx-auto h-5 w-5 animate-spin text-[#9b8990]" />
                   <p className="mt-3 text-[13px] font-medium text-[#6e6e73]">
-                    훅 유형을 불러오는 중…
+                    분류를 불러오는 중…
                   </p>
                 </>
               ) : (
                 <>
                   <p className="text-[13px] font-medium text-[#6e6e73]">
-                    아직 등록된 유형이 없어요
+                    아직 등록된 {tab === 'medium' ? '매체' : '앵글'}가 없어요
                   </p>
                   {fetchError && (
                     <div className="mx-auto mt-4 max-w-lg rounded-xl bg-[#fff4f4] px-4 py-3 text-left">
@@ -234,13 +292,15 @@ export function HookTypeManagerModal({
           {editingId ? (
             <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/[0.04]">
               <p className="mb-3 text-[12px] font-semibold text-[#3a3a3c]">
-                {editingId === 'new' ? '새 유형 추가' : '유형 편집'}
+                {editingId === 'new'
+                  ? `새 ${tab === 'medium' ? '매체' : '앵글'} 추가`
+                  : `${tab === 'medium' ? '매체' : '앵글'} 편집`}
               </p>
               <div className="flex gap-2">
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="유형 이름"
+                  placeholder="이름"
                   autoFocus
                   className="min-w-0 flex-1 rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[13px] outline-none ring-1 ring-transparent focus:bg-white focus:ring-[#b49ba1]/35"
                 />
@@ -257,7 +317,7 @@ export function HookTypeManagerModal({
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="이 유형을 언제 사용하는지 설명"
+                placeholder="설명 (선택)"
                 rows={2}
                 className="mt-2 w-full resize-none rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[12px] outline-none ring-1 ring-transparent focus:bg-white focus:ring-[#b49ba1]/35"
               />
@@ -293,7 +353,7 @@ export function HookTypeManagerModal({
               className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-black/10 bg-white/60 py-3 text-[12px] font-semibold text-[#765f68] transition hover:bg-white"
             >
               <Plus className="h-4 w-4" />
-              새 유형 추가
+              새 {tab === 'medium' ? '매체' : '앵글'} 추가
             </button>
           )}
         </div>
@@ -301,3 +361,6 @@ export function HookTypeManagerModal({
     </div>
   )
 }
+
+/** @deprecated Use HookTaxonomyManagerModal */
+export const HookTypeManagerModal = HookTaxonomyManagerModal

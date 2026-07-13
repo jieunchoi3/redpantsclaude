@@ -1,4 +1,4 @@
-import type { HookItem, HookType } from '../types'
+import type { HookAngle, HookItem, HookMedium } from '../types'
 import { callGemini, parseJsonFromAi } from './gemini'
 import { scoreHookForIdea, type IdeaHookContext } from './hookRelevance'
 
@@ -29,59 +29,146 @@ export type HookVariationContext = {
   formats?: string[]
 }
 
-export function buildTypeClassifyPrompt(
-  content: string,
-  types: HookType[],
-): string {
-  const typeLines =
-    types.length > 0
-      ? types
-          .map((type) => {
-            const desc = type.description ? `: ${type.description}` : ''
-            return `- ${type.name}${desc}`
-          })
-          .join('\n')
-      : '- (유형 없음)'
+function taxonomyLines(items: { name: string; description?: string | null }[]) {
+  return items.length > 0
+    ? items
+        .map((item) => {
+          const desc = item.description ? `: ${item.description}` : ''
+          return `- ${item.name}${desc}`
+        })
+        .join('\n')
+    : '- (없음)'
+}
 
+export type HookClassifyResult = {
+  mediums: HookMedium[]
+  angles: HookAngle[]
+}
+
+export function buildHookClassifyPrompt(
+  content: string,
+  mediums: HookMedium[],
+  angles: HookAngle[],
+): string {
   return `당신은 SNS 콘텐츠 훅 분류기입니다.
 
-아래 훅 문구를 읽고, 주어진 유형 목록 중 가장 맞는 유형 이름을 정확히 하나만 반환하세요.
-설명·마크다운·JSON·코드펜스 없이 유형 이름 텍스트만 출력하세요. 다른 글자는 쓰지 마세요.
+아래 훅 문구를 읽고, 매체와 앵글 목록에서 각각 맞는 항목 이름을 모두 골라 JSON으로 반환하세요.
+매체와 앵글은 독립적이에요. 둘 다 복수 선택 가능합니다.
+설명·마크다운·코드펜스 없이 JSON 객체만 출력하세요.
 
-유형 목록:
-${typeLines}
+형식: {"mediums":["릴스 음성 훅"],"angles":["비교형","공감형"]}
+맞는 항목이 없으면 빈 배열을 넣으세요.
+
+매체 목록:
+${taxonomyLines(mediums)}
+
+앵글 목록:
+${taxonomyLines(angles)}
 
 훅 문구:
 ${content.trim()}`
 }
 
-export function matchHookTypeName(
-  raw: string,
-  types: HookType[],
-): HookType | null {
-  const cleaned = raw
-    .trim()
-    .replace(/^```[\s\S]*?```$/i, '')
-    .replace(/^["'`]|["'`]$/g, '')
-    .trim()
-  if (!cleaned) return null
-
-  const exact = types.find((type) => type.name === cleaned)
-  if (exact) return exact
-
-  const partial = types.find(
-    (type) => type.name.includes(cleaned) || cleaned.includes(type.name),
-  )
-  return partial ?? null
+export function buildAngleClassifyPrompt(
+  content: string,
+  angles: HookAngle[],
+): string {
+  return buildHookClassifyPrompt(content, [], angles)
 }
 
+function namesFromClassifyPayload(raw: string): string[] {
+  const parsed = parseJsonFromAi<
+    string[] | { mediums?: unknown; angles?: unknown }
+  >(raw)
+  if (Array.isArray(parsed)) {
+    return parsed.filter((item): item is string => typeof item === 'string')
+  }
+  if (parsed && typeof parsed === 'object') {
+    const names: string[] = []
+    for (const key of ['mediums', 'angles'] as const) {
+      const value = parsed[key]
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (typeof item === 'string') names.push(item)
+        }
+      }
+    }
+    if (names.length > 0) return names
+  }
+  return [raw]
+}
+
+export function matchTaxonomyNames<T extends { name: string }>(
+  raw: string,
+  items: T[],
+): T[] {
+  const names = namesFromClassifyPayload(raw)
+  const matched: T[] = []
+  for (const name of names) {
+    const cleaned = String(name)
+      .trim()
+      .replace(/^["'`]|["'`]$/g, '')
+    if (!cleaned) continue
+    const exact = items.find((item) => item.name === cleaned)
+    if (exact && !matched.some((item) => item.name === exact.name)) {
+      matched.push(exact)
+      continue
+    }
+    const partial = items.find(
+      (item) =>
+        item.name.includes(cleaned) || cleaned.includes(item.name),
+    )
+    if (partial && !matched.some((item) => item.name === partial.name)) {
+      matched.push(partial)
+    }
+  }
+  return matched
+}
+
+export async function classifyHookTaxonomy(
+  content: string,
+  mediums: HookMedium[],
+  angles: HookAngle[],
+): Promise<HookClassifyResult> {
+  if (!content.trim()) return { mediums: [], angles: [] }
+  if (mediums.length === 0 && angles.length === 0) {
+    return { mediums: [], angles: [] }
+  }
+
+  const raw = await callGemini(
+    buildHookClassifyPrompt(content, mediums, angles),
+  )
+  const parsed = parseJsonFromAi<{ mediums?: unknown; angles?: unknown }>(raw)
+
+  const mediumNames = Array.isArray(parsed?.mediums)
+    ? parsed.mediums.filter((item): item is string => typeof item === 'string')
+    : []
+  const angleNames = Array.isArray(parsed?.angles)
+    ? parsed.angles.filter((item): item is string => typeof item === 'string')
+    : []
+
+  return {
+    mediums: matchTaxonomyNames(JSON.stringify(mediumNames), mediums),
+    angles: matchTaxonomyNames(JSON.stringify(angleNames), angles),
+  }
+}
+
+export async function classifyHookAngles(
+  content: string,
+  angles: HookAngle[],
+): Promise<HookAngle[]> {
+  if (!content.trim() || angles.length === 0) return []
+  const result = await classifyHookTaxonomy(content, [], angles)
+  return result.angles
+}
+
+/** @deprecated Use classifyHookAngles */
 export async function classifyHookType(
   content: string,
-  types: HookType[],
-): Promise<HookType | null> {
-  if (!content.trim() || types.length === 0) return null
-  const raw = await callGemini(buildTypeClassifyPrompt(content, types))
-  return matchHookTypeName(raw, types)
+  types: HookAngle[],
+): Promise<HookAngle | null> {
+  const matched = await classifyHookAngles(content, types)
+  return matched[0] ?? null
 }
 
 function activeFormats(context: IdeaHookContext): string[] {
@@ -95,16 +182,21 @@ function activeFormats(context: IdeaHookContext): string[] {
 export async function recommendHooksWithAi(
   idea: IdeaAiPayload,
   hooks: HookItem[],
-  types: HookType[],
+  mediums: HookMedium[],
+  angles: HookAngle[],
 ): Promise<HookRecommendation[] | null> {
   const candidates = hooks.filter((hook) => !hook.archived).slice(0, 80)
   if (candidates.length === 0) return []
 
-  const typeById = new Map(types.map((type) => [type.id, type]))
+  const mediumById = new Map(mediums.map((medium) => [medium.id, medium]))
+  const angleById = new Map(angles.map((angle) => [angle.id, angle]))
   const catalog = candidates.map((hook) => ({
     id: hook.id,
     content: hook.content.slice(0, 220),
-    type: hook.hook_type ? (typeById.get(hook.hook_type)?.name ?? null) : null,
+    mediums: hook.medium_ids
+      .map((id) => mediumById.get(id)?.name)
+      .filter(Boolean),
+    angles: hook.angle_ids.map((id) => angleById.get(id)?.name).filter(Boolean),
     average_rating: hook.average_rating,
     usage_count: hook.usage_count,
   }))
@@ -117,7 +209,7 @@ export async function recommendHooksWithAi(
 - 브레인스토밍 요약: ${stripHtml(idea.brainstorm).slice(0, 500) || '(없음)'}
 - 계정: ${idea.accountName ?? '(미지정)'}
 - 포맷: ${formats.join(', ') || '(미지정)'}
-- 카테고리: ${idea.context.categoryName ?? '(없음)'}
+- 카테고리: ${idea.context.categoryName ?? '(미지정)'}
 
 아래 후보 훅 목록에서 이 아이디어에 가장 어울리는 훅 id를 관련도 높은 순으로 골라주세요.
 설명·마크다운·코드펜스 없이 JSON 배열만 출력하세요.
@@ -145,14 +237,15 @@ ${JSON.stringify(catalog)}`
 export function fallbackHookRecommendations(
   hooks: HookItem[],
   context: IdeaHookContext,
-  typeById: Map<string, HookType>,
+  mediumById: Map<string, HookMedium>,
+  angleById: Map<string, HookAngle>,
   limit = 8,
 ): HookRecommendation[] {
   return hooks
     .filter((hook) => !hook.archived)
     .map((hook) => ({
       hook,
-      score: scoreHookForIdea(hook, context, typeById),
+      score: scoreHookForIdea(hook, context, mediumById, angleById),
     }))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)

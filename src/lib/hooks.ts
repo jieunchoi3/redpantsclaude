@@ -1,9 +1,11 @@
 import type {
   Account,
   ContentHook,
+  HookAngle,
   HookItem,
   HookMediaKind,
-  HookType,
+  HookMedium,
+  HookTaxonomy,
   HookUsage,
   HookUsageWithIdea,
 } from '../types'
@@ -12,7 +14,8 @@ import { getSupabase } from './supabase'
 
 export type HookInput = {
   content: string
-  hook_type: string | null
+  medium_ids: string[]
+  angle_ids: string[]
   media_kind: HookMediaKind
   image_url: string | null
   video_url: string | null
@@ -20,6 +23,13 @@ export type HookInput = {
   source_note: string | null
   is_inbox?: boolean
   account_ids: string[]
+}
+
+export type TaxonomyInput = {
+  name: string
+  description?: string | null
+  color?: string | null
+  sort_order?: number
 }
 
 export type HookFetchDiagnostic = {
@@ -31,31 +41,12 @@ export type HookFetchDiagnostic = {
 
 export type HookLibraryData = {
   hooks: HookItem[]
-  types: HookType[]
+  mediums: HookMedium[]
+  angles: HookAngle[]
   accounts: Account[]
   usages: HookUsage[]
   error: string | null
   diagnostics: HookFetchDiagnostic[]
-}
-
-function buildHookTypeIndex(types: HookType[]) {
-  const byId = new Map(types.map((type) => [type.id, type]))
-  const byName = new Map(types.map((type) => [type.name.trim(), type.id]))
-  return { byId, byName }
-}
-
-/** Seeds may store cp_hooks.hook_type as a type id or type name. */
-export function resolveHookTypeId(
-  hookType: string | null | undefined,
-  types: HookType[],
-): string | null {
-  if (!hookType) return null
-  const trimmed = hookType.trim()
-  if (!trimmed) return null
-
-  const { byId, byName } = buildHookTypeIndex(types)
-  if (byId.has(trimmed)) return trimmed
-  return byName.get(trimmed) ?? trimmed
 }
 
 function formatFetchError(error: {
@@ -97,7 +88,8 @@ function diagnosticFromResult(
 
 function buildHookFetchError(
   diagnostics: HookFetchDiagnostic[],
-  types: HookType[],
+  mediums: HookMedium[],
+  angles: HookAngle[],
   hooks: ContentHook[],
 ): string | null {
   const failures = diagnostics.filter((entry) => entry.error)
@@ -110,9 +102,12 @@ function buildHookFetchError(
       .join('\n')
   }
 
-  if (types.length > 0) return null
+  if (mediums.length > 0 || angles.length > 0) return null
 
-  const typesDiag = diagnostics.find((entry) => entry.table === TABLES.hookTypes)
+  const mediumsDiag = diagnostics.find(
+    (entry) => entry.table === TABLES.hookMediums,
+  )
+  const anglesDiag = diagnostics.find((entry) => entry.table === TABLES.hookAngles)
   const hooksDiag = diagnostics.find((entry) => entry.table === TABLES.hooks)
   const projectHost = (() => {
     try {
@@ -123,18 +118,84 @@ function buildHookFetchError(
   })()
 
   const lines = [
-    `cp_hook_types: ${typesDiag?.rowCount ?? 0} rows (HTTP ${typesDiag?.status ?? '?'})`,
+    `cp_hook_mediums: ${mediumsDiag?.rowCount ?? 0} rows (HTTP ${mediumsDiag?.status ?? '?'})`,
+    `cp_hook_angles: ${anglesDiag?.rowCount ?? 0} rows (HTTP ${anglesDiag?.status ?? '?'})`,
     `cp_hooks: ${hooksDiag?.rowCount ?? hooks.length} rows (HTTP ${hooksDiag?.status ?? '?'})`,
     `Supabase project: ${projectHost}`,
   ]
 
-  if ((typesDiag?.rowCount ?? 0) === 0) {
+  if ((mediumsDiag?.rowCount ?? 0) === 0 && (anglesDiag?.rowCount ?? 0) === 0) {
     lines.push(
-      'SQL Editor에 데이터가 보이는데 앱이 0건이면 RLS 정책이 빠졌을 수 있어요. supabase/v3_hook_library.sql 84–95행(anon all 정책)을 실행하세요.',
+      'SQL Editor에 데이터가 보이는데 앱이 0건이면 RLS 정책이 빠졌을 수 있어요. supabase/v4_hook_taxonomy_rls.sql 을 실행하세요.',
     )
   }
 
   return lines.join('\n')
+}
+
+function buildIdsByHook<T extends { hook_id: string }>(
+  rows: T[],
+  idKey: keyof T,
+): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const row of rows) {
+    const hookId = row.hook_id
+    const refId = String(row[idKey])
+    const current = map.get(hookId) ?? []
+    current.push(refId)
+    map.set(hookId, current)
+  }
+  return map
+}
+
+async function syncHookMediumMap(
+  hookId: string,
+  mediumIds: string[],
+): Promise<boolean> {
+  const sb = getSupabase()
+  if (!sb) return false
+  const { error: clearError } = await sb
+    .from(TABLES.hookMediumMap)
+    .delete()
+    .eq('hook_id', hookId)
+  if (clearError) {
+    console.warn('[cp_hook_medium_map] clear error:', clearError.message)
+    return false
+  }
+  if (mediumIds.length === 0) return true
+  const { error } = await sb.from(TABLES.hookMediumMap).insert(
+    mediumIds.map((mediumId) => ({ hook_id: hookId, medium_id: mediumId })),
+  )
+  if (error) {
+    console.warn('[cp_hook_medium_map] insert error:', error.message)
+    return false
+  }
+  return true
+}
+
+async function syncHookAngleMap(
+  hookId: string,
+  angleIds: string[],
+): Promise<boolean> {
+  const sb = getSupabase()
+  if (!sb) return false
+  const { error: clearError } = await sb
+    .from(TABLES.hookAngleMap)
+    .delete()
+    .eq('hook_id', hookId)
+  if (clearError) {
+    console.warn('[cp_hook_angle_map] clear error:', clearError.message)
+    return false
+  }
+  if (angleIds.length === 0) return true
+  const { error } = await sb.from(TABLES.hookAngleMap).insert(
+    angleIds.map((angleId) => ({ hook_id: hookId, angle_id: angleId })),
+  )
+  if (error) {
+    console.warn('[cp_hook_angle_map] insert error:', error.message)
+    return false
+  }
+  return true
 }
 
 export async function fetchHookLibrary(): Promise<HookLibraryData> {
@@ -142,7 +203,8 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
   if (!sb) {
     return {
       hooks: [],
-      types: [],
+      mediums: [],
+      angles: [],
       accounts: [],
       usages: [],
       error: 'Supabase 미설정 — VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 확인',
@@ -150,27 +212,45 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
     }
   }
 
-  const [hookResult, typeResult, linkResult, usageResult, accountResult] =
-    await Promise.all([
-      sb.from(TABLES.hooks).select('*').order('created_at', { ascending: false }),
-      sb
-        .from(TABLES.hookTypes)
-        .select('*')
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true }),
-      sb.from(TABLES.hookAccounts).select('hook_id, account_id'),
-      sb.from(TABLES.hookUsages).select('*'),
-      sb
-        .from(TABLES.accounts)
-        .select('*')
-        .eq('archived', false)
-        .order('workspace', { ascending: true })
-        .order('sort_order', { ascending: true }),
-    ])
+  const [
+    hookResult,
+    mediumResult,
+    angleResult,
+    mediumMapResult,
+    angleMapResult,
+    linkResult,
+    usageResult,
+    accountResult,
+  ] = await Promise.all([
+    sb.from(TABLES.hooks).select('*').order('created_at', { ascending: false }),
+    sb
+      .from(TABLES.hookMediums)
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    sb
+      .from(TABLES.hookAngles)
+      .select('*')
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true }),
+    sb.from(TABLES.hookMediumMap).select('hook_id, medium_id'),
+    sb.from(TABLES.hookAngleMap).select('hook_id, angle_id'),
+    sb.from(TABLES.hookAccounts).select('hook_id, account_id'),
+    sb.from(TABLES.hookUsages).select('*'),
+    sb
+      .from(TABLES.accounts)
+      .select('*')
+      .eq('archived', false)
+      .order('workspace', { ascending: true })
+      .order('sort_order', { ascending: true }),
+  ])
 
   const diagnostics: HookFetchDiagnostic[] = [
     diagnosticFromResult(TABLES.hooks, hookResult),
-    diagnosticFromResult(TABLES.hookTypes, typeResult),
+    diagnosticFromResult(TABLES.hookMediums, mediumResult),
+    diagnosticFromResult(TABLES.hookAngles, angleResult),
+    diagnosticFromResult(TABLES.hookMediumMap, mediumMapResult),
+    diagnosticFromResult(TABLES.hookAngleMap, angleMapResult),
     diagnosticFromResult(TABLES.hookAccounts, linkResult),
     diagnosticFromResult(TABLES.hookUsages, usageResult),
     diagnosticFromResult(TABLES.accounts, accountResult),
@@ -178,27 +258,34 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
 
   console.info('[hook-library] fetch diagnostics:', diagnostics)
 
-  const types = (typeResult.error ? [] : (typeResult.data ?? [])) as HookType[]
+  const mediums = (mediumResult.error ? [] : (mediumResult.data ?? [])) as HookMedium[]
+  const angles = (angleResult.error ? [] : (angleResult.data ?? [])) as HookAngle[]
   const hookRows = (hookResult.error ? [] : (hookResult.data ?? [])) as ContentHook[]
+  const mediumMaps = (mediumMapResult.error ? [] : (mediumMapResult.data ?? [])) as {
+    hook_id: string
+    medium_id: string
+  }[]
+  const angleMaps = (angleMapResult.error ? [] : (angleMapResult.data ?? [])) as {
+    hook_id: string
+    angle_id: string
+  }[]
   const links = (linkResult.error ? [] : (linkResult.data ?? [])) as {
     hook_id: string
     account_id: string
   }[]
   const usages = (usageResult.error ? [] : (usageResult.data ?? [])) as HookUsage[]
   const accounts = (accountResult.error ? [] : (accountResult.data ?? [])) as Account[]
-  const error = buildHookFetchError(diagnostics, types, hookRows)
+  const error = buildHookFetchError(diagnostics, mediums, angles, hookRows)
 
   if (error) {
     console.warn('[hook-library] fetch issue:', error, diagnostics)
   }
-  const accountIdsByHook = new Map<string, string[]>()
+
+  const mediumIdsByHook = buildIdsByHook(mediumMaps, 'medium_id')
+  const angleIdsByHook = buildIdsByHook(angleMaps, 'angle_id')
+  const accountIdsByHook = buildIdsByHook(links, 'account_id')
   const usagesByHook = new Map<string, HookUsage[]>()
 
-  for (const link of links) {
-    const current = accountIdsByHook.get(link.hook_id) ?? []
-    current.push(link.account_id)
-    accountIdsByHook.set(link.hook_id, current)
-  }
   for (const usage of usages) {
     const current = usagesByHook.get(usage.hook_id) ?? []
     current.push(usage)
@@ -212,7 +299,8 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
       .filter((rating): rating is number => typeof rating === 'number')
     return {
       ...hook,
-      hook_type: resolveHookTypeId(hook.hook_type, types),
+      medium_ids: mediumIdsByHook.get(hook.id) ?? [],
+      angle_ids: angleIdsByHook.get(hook.id) ?? [],
       account_ids: accountIdsByHook.get(hook.id) ?? [],
       usage_count: Math.max(hook.used_count ?? 0, hookUsages.length),
       average_rating:
@@ -224,7 +312,8 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
 
   return {
     hooks,
-    types,
+    mediums,
+    angles,
     accounts,
     usages,
     error,
@@ -341,11 +430,12 @@ export async function fetchHookUsageHistory(
 export async function createHook(input: HookInput): Promise<ContentHook | null> {
   const sb = getSupabase()
   if (!sb) return null
-  const { account_ids, ...payload } = input
+  const { account_ids, medium_ids, angle_ids, ...payload } = input
   const { data, error } = await sb
     .from(TABLES.hooks)
     .insert({
       ...payload,
+      hook_type: null,
       archived: false,
       used_count: 0,
       updated_at: new Date().toISOString(),
@@ -358,10 +448,11 @@ export async function createHook(input: HookInput): Promise<ContentHook | null> 
     return null
   }
 
+  const hookId = data.id as string
   if (account_ids.length > 0) {
     const { error: linkError } = await sb.from(TABLES.hookAccounts).insert(
       account_ids.map((accountId) => ({
-        hook_id: data.id as string,
+        hook_id: hookId,
         account_id: accountId,
       })),
     )
@@ -369,6 +460,8 @@ export async function createHook(input: HookInput): Promise<ContentHook | null> 
       console.warn('[cp_hook_accounts] create error:', linkError.message)
     }
   }
+  await syncHookMediumMap(hookId, medium_ids)
+  await syncHookAngleMap(hookId, angle_ids)
   return data as ContentHook
 }
 
@@ -378,10 +471,14 @@ export async function updateHook(
 ): Promise<ContentHook | null> {
   const sb = getSupabase()
   if (!sb) return null
-  const { account_ids, ...payload } = input
+  const { account_ids, medium_ids, angle_ids, ...payload } = input
   const { data, error } = await sb
     .from(TABLES.hooks)
-    .update({ ...payload, updated_at: new Date().toISOString() })
+    .update({
+      ...payload,
+      hook_type: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
     .select()
     .single()
@@ -408,6 +505,8 @@ export async function updateHook(
       console.warn('[cp_hook_accounts] update error:', linkError.message)
     }
   }
+  await syncHookMediumMap(id, medium_ids)
+  await syncHookAngleMap(id, angle_ids)
   return data as ContentHook
 }
 
@@ -428,60 +527,99 @@ export async function setHookArchived(
   return true
 }
 
-export async function createHookType(input: {
-  name: string
-  description?: string | null
-  color?: string | null
-  sort_order?: number
-}): Promise<HookType | null> {
+async function createTaxonomy(
+  table: typeof TABLES.hookMediums | typeof TABLES.hookAngles,
+  input: TaxonomyInput,
+): Promise<HookTaxonomy | null> {
   const sb = getSupabase()
   if (!sb) return null
-  const { data, error } = await sb
-    .from(TABLES.hookTypes)
-    .insert(input)
-    .select()
-    .single()
+  const { data, error } = await sb.from(table).insert(input).select().single()
   if (error) {
-    console.warn('[cp_hook_types] create error:', error.message)
+    console.warn(`[${table}] create error:`, error.message)
     return null
   }
-  return data as HookType
+  return data as HookTaxonomy
 }
 
-export async function updateHookType(
+async function updateTaxonomy(
+  table: typeof TABLES.hookMediums | typeof TABLES.hookAngles,
   id: string,
-  patch: Pick<HookType, 'name' | 'description' | 'color'>,
-): Promise<HookType | null> {
+  patch: Pick<HookTaxonomy, 'name' | 'description' | 'color'>,
+): Promise<HookTaxonomy | null> {
   const sb = getSupabase()
   if (!sb) return null
   const { data, error } = await sb
-    .from(TABLES.hookTypes)
+    .from(table)
     .update(patch)
     .eq('id', id)
     .select()
     .single()
   if (error) {
-    console.warn('[cp_hook_types] update error:', error.message)
+    console.warn(`[${table}] update error:`, error.message)
     return null
   }
-  return data as HookType
+  return data as HookTaxonomy
 }
 
-export async function deleteHookType(id: string): Promise<boolean> {
+async function deleteTaxonomy(
+  table: typeof TABLES.hookMediums | typeof TABLES.hookAngles,
+  mapTable: typeof TABLES.hookMediumMap | typeof TABLES.hookAngleMap,
+  idColumn: 'medium_id' | 'angle_id',
+  id: string,
+): Promise<boolean> {
   const sb = getSupabase()
   if (!sb) return false
   const { error: unlinkError } = await sb
-    .from(TABLES.hooks)
-    .update({ hook_type: null, updated_at: new Date().toISOString() })
-    .eq('hook_type', id)
+    .from(mapTable)
+    .delete()
+    .eq(idColumn, id)
   if (unlinkError) {
-    console.warn('[cp_hooks] clear hook type error:', unlinkError.message)
+    console.warn(`[${mapTable}] unlink error:`, unlinkError.message)
     return false
   }
-  const { error } = await sb.from(TABLES.hookTypes).delete().eq('id', id)
+  const { error } = await sb.from(table).delete().eq('id', id)
   if (error) {
-    console.warn('[cp_hook_types] delete error:', error.message)
+    console.warn(`[${table}] delete error:`, error.message)
     return false
   }
   return true
+}
+
+export async function createHookMedium(
+  input: TaxonomyInput,
+): Promise<HookMedium | null> {
+  return (await createTaxonomy(TABLES.hookMediums, input)) as HookMedium | null
+}
+
+export async function updateHookMedium(
+  id: string,
+  patch: Pick<HookMedium, 'name' | 'description' | 'color'>,
+): Promise<HookMedium | null> {
+  return (await updateTaxonomy(TABLES.hookMediums, id, patch)) as HookMedium | null
+}
+
+export async function deleteHookMedium(id: string): Promise<boolean> {
+  return deleteTaxonomy(
+    TABLES.hookMediums,
+    TABLES.hookMediumMap,
+    'medium_id',
+    id,
+  )
+}
+
+export async function createHookAngle(
+  input: TaxonomyInput,
+): Promise<HookAngle | null> {
+  return (await createTaxonomy(TABLES.hookAngles, input)) as HookAngle | null
+}
+
+export async function updateHookAngle(
+  id: string,
+  patch: Pick<HookAngle, 'name' | 'description' | 'color'>,
+): Promise<HookAngle | null> {
+  return (await updateTaxonomy(TABLES.hookAngles, id, patch)) as HookAngle | null
+}
+
+export async function deleteHookAngle(id: string): Promise<boolean> {
+  return deleteTaxonomy(TABLES.hookAngles, TABLES.hookAngleMap, 'angle_id', id)
 }

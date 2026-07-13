@@ -1,5 +1,6 @@
-import type { HookType } from '../types'
+import type { HookAngle, HookMedium } from '../types'
 import { callGeminiMultimodal, parseJsonFromAi } from './gemini'
+import { matchTaxonomyNames } from './hookAi'
 
 export type ExtractedPhrase = {
   text: string
@@ -9,24 +10,38 @@ export type ExtractedPhrase = {
 
 export type HookExtractResult = {
   phrases: ExtractedPhrase[]
-  suggestedTypeName: string | null
+  suggestedMediums: HookMedium[]
+  suggestedAngles: HookAngle[]
 }
 
 type GeminiExtractPayload = {
   phrases?: unknown
-  hook_type?: unknown
+  mediums?: unknown
+  angles?: unknown
 }
 
-export function buildHookExtractPrompt(types: HookType[]): string {
-  const typeLines =
-    types.length > 0
-      ? types
-          .map((type) => {
-            const desc = type.description ? ` — ${type.description}` : ''
-            return `- ${type.name}${desc}`
+export function buildHookExtractPrompt(
+  mediums: HookMedium[],
+  angles: HookAngle[],
+): string {
+  const mediumLines =
+    mediums.length > 0
+      ? mediums
+          .map((medium) => {
+            const desc = medium.description ? ` — ${medium.description}` : ''
+            return `- ${medium.name}${desc}`
           })
           .join('\n')
-      : '- (유형 없음)'
+      : '- (없음)'
+  const angleLines =
+    angles.length > 0
+      ? angles
+          .map((angle) => {
+            const desc = angle.description ? ` — ${angle.description}` : ''
+            return `- ${angle.name}${desc}`
+          })
+          .join('\n')
+      : '- (없음)'
 
   return `이 이미지에 보이는 한국어 텍스트를 읽어주세요.
 
@@ -38,13 +53,16 @@ export function buildHookExtractPrompt(types: HookType[]): string {
 - 본문 캡션 전체, 해시태그, 광고 문구
 - 이미지에 없는 추측 문구
 
-훅 유형 목록 (가장 맞는 이름을 hook_type에 정확히 하나만):
-${typeLines}
+매체 목록 (맞는 이름을 mediums 배열에):
+${mediumLines}
+
+앵글 목록 (맞는 이름을 angles 배열에):
+${angleLines}
 
 반환 형식 (JSON만, 마크다운·설명·코드펜스 금지):
-{"phrases":["훅 문구1","훅 문구2"],"hook_type":"유형 이름"}
+{"phrases":["훅 문구1","훅 문구2"],"mediums":["매체 이름"],"angles":["앵글 이름"]}
 
-phrases가 없으면 {"phrases":[],"hook_type":""} 를 반환하세요.`
+phrases가 없으면 {"phrases":[],"mediums":[],"angles":[]} 를 반환하세요.`
 }
 
 export async function fileToBase64(
@@ -85,21 +103,6 @@ export async function imageSourceToBase64(
   }
 }
 
-export function resolveHookTypeId(
-  typeName: string | null | undefined,
-  types: HookType[],
-): string {
-  if (!typeName?.trim()) return ''
-  const normalized = typeName.trim()
-  const exact = types.find((type) => type.name === normalized)
-  if (exact) return exact.id
-  const loose = types.find(
-    (type) =>
-      type.name.includes(normalized) || normalized.includes(type.name),
-  )
-  return loose?.id ?? ''
-}
-
 export function markDuplicatePhrases(
   phrases: string[],
   existingContents: Set<string>,
@@ -116,14 +119,19 @@ export function markDuplicatePhrases(
 
 export async function extractHooksFromImage(
   image: { mime_type: string; data: string },
-  types: HookType[],
+  mediums: HookMedium[],
+  angles: HookAngle[],
   existingContents: Set<string>,
 ): Promise<HookExtractResult> {
-  const raw = await callGeminiMultimodal(buildHookExtractPrompt(types), image)
+  const raw = await callGeminiMultimodal(
+    buildHookExtractPrompt(mediums, angles),
+    image,
+  )
   const parsed = parseJsonFromAi<GeminiExtractPayload | string[]>(raw.text)
 
   let phrases: string[] = []
-  let suggestedTypeName: string | null = null
+  let suggestedMediumNames: string[] = []
+  let suggestedAngleNames: string[] = []
 
   if (Array.isArray(parsed)) {
     phrases = parsed.filter((item): item is string => typeof item === 'string')
@@ -133,8 +141,15 @@ export async function extractHooksFromImage(
         (item): item is string => typeof item === 'string',
       )
     }
-    if (typeof parsed.hook_type === 'string') {
-      suggestedTypeName = parsed.hook_type.trim() || null
+    if (Array.isArray(parsed.mediums)) {
+      suggestedMediumNames = parsed.mediums.filter(
+        (item): item is string => typeof item === 'string',
+      )
+    }
+    if (Array.isArray(parsed.angles)) {
+      suggestedAngleNames = parsed.angles.filter(
+        (item): item is string => typeof item === 'string',
+      )
     }
   }
 
@@ -142,6 +157,13 @@ export async function extractHooksFromImage(
 
   return {
     phrases: markDuplicatePhrases(phrases, existingContents),
-    suggestedTypeName,
+    suggestedMediums: matchTaxonomyNames(
+      JSON.stringify(suggestedMediumNames),
+      mediums,
+    ),
+    suggestedAngles: matchTaxonomyNames(
+      JSON.stringify(suggestedAngleNames),
+      angles,
+    ),
   }
 }

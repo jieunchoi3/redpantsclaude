@@ -1,17 +1,39 @@
-import type { Account, HookType } from '../types'
+import type { Account, HookAngle, HookMedium } from '../types'
 import { accountColor } from '../lib/accounts'
-import { accountChipStyle, hookTypeBadgeStyle } from '../lib/hookUi'
+import {
+  accountChipStyle,
+  hookAngleBadgeStyle,
+  hookMediumBadgeStyle,
+} from '../lib/hookUi'
 
-export function HookTypeBadge({
-  type,
-  fallback = '유형 미지정',
+export function HookMediumBadge({
+  medium,
   className = '',
 }: {
-  type?: HookType | null
+  medium: HookMedium
+  className?: string
+}) {
+  return (
+    <span
+      className={`max-w-full truncate rounded-full px-2.5 py-1 text-[10px] font-semibold ${className}`}
+      style={hookMediumBadgeStyle(medium)}
+      title={medium.description ?? medium.name}
+    >
+      {medium.name}
+    </span>
+  )
+}
+
+export function HookAngleBadge({
+  angle,
+  fallback = '앵글 미지정',
+  className = '',
+}: {
+  angle?: HookAngle | null
   fallback?: string
   className?: string
 }) {
-  if (!type) {
+  if (!angle) {
     return (
       <span
         className={`rounded-full bg-[#f1f1f3] px-2.5 py-1 text-[10px] font-medium text-[#8e8e93] ${className}`}
@@ -24,13 +46,16 @@ export function HookTypeBadge({
   return (
     <span
       className={`max-w-full truncate rounded-full px-2.5 py-1 text-[10px] font-semibold ${className}`}
-      style={hookTypeBadgeStyle(type)}
-      title={type.description ?? type.name}
+      style={hookAngleBadgeStyle(angle)}
+      title={angle.description ?? angle.name}
     >
-      {type.name}
+      {angle.name}
     </span>
   )
 }
+
+/** @deprecated Use HookAngleBadge */
+export const HookTypeBadge = HookAngleBadge
 
 export function HookAccountChips({
   accounts,

@@ -15,21 +15,22 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
-import type { Account, HookItem, HookType } from '../types'
+import type { Account, HookAngle, HookItem, HookMedium } from '../types'
 import type { HookFetchDiagnostic, HookInput } from '../lib/hooks'
-import { hookTypeBadgeStyle } from '../lib/hookUi'
-import { HookAccountChips, HookTypeBadge } from './HookBadges'
+import { HookAccountChips, HookAngleBadge, HookMediumBadge } from './HookBadges'
+import { HookAxisFilterRow } from './HookAxisMultiSelect'
 import { HookEditorModal } from './HookEditorModal'
 import { HookMediaPreview } from './HookMediaPreview'
 import { HookUsageHistoryModal } from './HookUsageHistoryModal'
-import { HookTypeManagerModal } from './HookTypeManagerModal'
+import { HookTaxonomyManagerModal } from './HookTypeManagerModal'
 
 type HookSort = 'latest' | 'used' | 'rating'
 type HookLayout = 'grid' | 'list'
 
 interface HookLibraryProps {
   hooks: HookItem[]
-  types: HookType[]
+  mediums: HookMedium[]
+  angles: HookAngle[]
   accounts: Account[]
   loading: boolean
   error: string | null
@@ -38,21 +39,32 @@ interface HookLibraryProps {
   onUpdate: (id: string, input: HookInput) => Promise<boolean>
   onArchive: (id: string) => Promise<boolean>
   onRestore: (id: string) => Promise<boolean>
-  onAddType: (input: {
+  onAddMedium: (input: {
     name: string
     description?: string | null
     color?: string | null
-  }) => Promise<HookType | null>
-  onUpdateType: (
+  }) => Promise<HookMedium | null>
+  onUpdateMedium: (
     id: string,
-    patch: Pick<HookType, 'name' | 'description' | 'color'>,
+    patch: Pick<HookMedium, 'name' | 'description' | 'color'>,
   ) => Promise<boolean>
-  onDeleteType: (id: string) => Promise<boolean>
+  onDeleteMedium: (id: string) => Promise<boolean>
+  onAddAngle: (input: {
+    name: string
+    description?: string | null
+    color?: string | null
+  }) => Promise<HookAngle | null>
+  onUpdateAngle: (
+    id: string,
+    patch: Pick<HookAngle, 'name' | 'description' | 'color'>,
+  ) => Promise<boolean>
+  onDeleteAngle: (id: string) => Promise<boolean>
 }
 
 export function HookLibrary({
   hooks,
-  types,
+  mediums,
+  angles,
   accounts,
   loading,
   error,
@@ -61,24 +73,32 @@ export function HookLibrary({
   onUpdate,
   onArchive,
   onRestore,
-  onAddType,
-  onUpdateType,
-  onDeleteType,
+  onAddMedium,
+  onUpdateMedium,
+  onDeleteMedium,
+  onAddAngle,
+  onUpdateAngle,
+  onDeleteAngle,
 }: HookLibraryProps) {
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('all')
+  const [mediumFilter, setMediumFilter] = useState<Set<string>>(new Set())
+  const [angleFilter, setAngleFilter] = useState<Set<string>>(new Set())
   const [accountFilter, setAccountFilter] = useState('all')
   const [sort, setSort] = useState<HookSort>('latest')
   const [layout, setLayout] = useState<HookLayout>('grid')
   const [showTrash, setShowTrash] = useState(false)
   const [showInbox, setShowInbox] = useState(false)
-  const [showTypeManager, setShowTypeManager] = useState(false)
+  const [showTaxonomyManager, setShowTaxonomyManager] = useState(false)
   const [editing, setEditing] = useState<HookItem | null | undefined>()
   const [historyHook, setHistoryHook] = useState<HookItem | null>(null)
 
-  const typeById = useMemo(
-    () => new Map(types.map((type) => [type.id, type])),
-    [types],
+  const mediumById = useMemo(
+    () => new Map(mediums.map((medium) => [medium.id, medium])),
+    [mediums],
+  )
+  const angleById = useMemo(
+    () => new Map(angles.map((angle) => [angle.id, angle])),
+    [angles],
   )
   const accountById = useMemo(
     () => new Map(accounts.map((account) => [account.id, account])),
@@ -109,7 +129,14 @@ export function HookLibrary({
       if (query && !hook.content.toLocaleLowerCase('ko').includes(query)) {
         return false
       }
-      if (typeFilter !== 'all' && hook.hook_type !== typeFilter) return false
+      if (mediumFilter.size > 0) {
+        const hasMedium = hook.medium_ids.some((id) => mediumFilter.has(id))
+        if (!hasMedium) return false
+      }
+      if (angleFilter.size > 0) {
+        const hasAngle = hook.angle_ids.some((id) => angleFilter.has(id))
+        if (!hasAngle) return false
+      }
       if (
         accountFilter !== 'all' &&
         hook.account_ids.length > 0 &&
@@ -128,12 +155,13 @@ export function HookLibrary({
     })
   }, [
     accountFilter,
+    angleFilter,
     hooks,
+    mediumFilter,
     search,
     showTrash,
     showInbox,
     sort,
-    typeFilter,
   ])
 
   if (loading) {
@@ -171,11 +199,11 @@ export function HookLibrary({
               <>
                 <button
                   type="button"
-                  onClick={() => setShowTypeManager(true)}
+                  onClick={() => setShowTaxonomyManager(true)}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[12px] font-medium text-[#6e6e73] transition hover:bg-[#ededf0]"
                 >
                   <Palette className="h-3.5 w-3.5" />
-                  유형 관리
+                  분류 관리
                 </button>
                 <button
                   type="button"
@@ -241,15 +269,6 @@ export function HookLibrary({
           </label>
           <div className="flex flex-wrap gap-2">
             <FilterSelect
-              value={typeFilter}
-              onChange={setTypeFilter}
-              label="유형"
-              options={[
-                ['all', '모든 유형'],
-                ...types.map((type) => [type.id, type.name] as [string, string]),
-              ]}
-            />
-            <FilterSelect
               value={accountFilter}
               onChange={setAccountFilter}
               label="계정"
@@ -299,42 +318,38 @@ export function HookLibrary({
           </div>
         </div>
 
-        {!showTrash && types.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setTypeFilter('all')}
-              className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
-                typeFilter === 'all'
-                  ? 'bg-[#1d1d1f] text-white shadow-sm'
-                  : 'bg-[#f5f5f7] text-[#6e6e73] ring-1 ring-black/[0.05] hover:bg-[#ededf0]'
-              }`}
-            >
-              전체
-            </button>
-            {types.map((type) => (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() =>
-                  setTypeFilter((current) =>
-                    current === type.id ? 'all' : type.id,
-                  )
-                }
-                className="max-w-[220px] truncate rounded-full px-3 py-1.5 text-[11px] font-semibold transition"
-                style={
-                  typeFilter === type.id
-                    ? {
-                        ...hookTypeBadgeStyle(type),
-                        boxShadow: `0 1px 3px ${type.color ?? '#bca8af'}33`,
-                      }
-                    : hookTypeBadgeStyle(type)
-                }
-                title={type.name}
-              >
-                {type.name}
-              </button>
-            ))}
+        {!showTrash && (mediums.length > 0 || angles.length > 0) && (
+          <div className="space-y-2">
+            <HookAxisFilterRow
+              kind="medium"
+              label="매체"
+              items={mediums}
+              selectedIds={mediumFilter}
+              onToggle={(id) =>
+                setMediumFilter((current) => {
+                  const next = new Set(current)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }
+              onClear={() => setMediumFilter(new Set())}
+            />
+            <HookAxisFilterRow
+              kind="angle"
+              label="앵글"
+              items={angles}
+              selectedIds={angleFilter}
+              onToggle={(id) =>
+                setAngleFilter((current) => {
+                  const next = new Set(current)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }
+              onClear={() => setAngleFilter(new Set())}
+            />
           </div>
         )}
       </div>
@@ -351,7 +366,7 @@ export function HookLibrary({
             </code>{' '}
             또는{' '}
             <code className="rounded bg-white px-1.5 py-0.5">
-              supabase/v3_hook_rls_fix.sql
+              supabase/v4_hook_taxonomy_rls.sql
             </code>
             을 실행해 주세요.
           </p>
@@ -375,7 +390,8 @@ export function HookLibrary({
           inbox={showInbox}
           hasFilters={
             Boolean(search) ||
-            typeFilter !== 'all' ||
+            mediumFilter.size > 0 ||
+            angleFilter.size > 0 ||
             accountFilter !== 'all' ||
             showInbox
           }
@@ -393,7 +409,12 @@ export function HookLibrary({
             <HookCard
               key={hook.id}
               hook={hook}
-              type={hook.hook_type ? typeById.get(hook.hook_type) : undefined}
+              mediums={hook.medium_ids
+                .map((id) => mediumById.get(id))
+                .filter((medium): medium is HookMedium => Boolean(medium))}
+              angles={hook.angle_ids
+                .map((id) => angleById.get(id))
+                .filter((angle): angle is HookAngle => Boolean(angle))}
               accounts={hook.account_ids
                 .map((id) => accountById.get(id))
                 .filter((account): account is Account => Boolean(account))}
@@ -410,8 +431,10 @@ export function HookLibrary({
 
       {editing !== undefined && (
         <HookEditorModal
+          key={editing?.id ?? 'new'}
           hook={editing}
-          types={types}
+          mediums={mediums}
+          angles={angles}
           accounts={accounts}
           existingHooks={hooks}
           onClose={() => setEditing(undefined)}
@@ -419,32 +442,40 @@ export function HookLibrary({
             editing ? onUpdate(editing.id, input) : onAdd(input)
           }
           onCreateHooks={createMultiple}
-          onAddType={onAddType}
-          onUpdateType={onUpdateType}
-          onDeleteType={onDeleteType}
+          onAddMedium={onAddMedium}
+          onUpdateMedium={onUpdateMedium}
+          onDeleteMedium={onDeleteMedium}
+          onAddAngle={onAddAngle}
+          onUpdateAngle={onUpdateAngle}
+          onDeleteAngle={onDeleteAngle}
         />
       )}
-      {showTypeManager && (
-        <HookTypeManagerModal
-          types={types}
+      {showTaxonomyManager && (
+        <HookTaxonomyManagerModal
+          mediums={mediums}
+          angles={angles}
           hooks={hooks}
           loading={loading}
           fetchError={error}
           diagnostics={diagnostics}
-          onClose={() => setShowTypeManager(false)}
-          onAdd={onAddType}
-          onUpdate={onUpdateType}
-          onDelete={onDeleteType}
+          onClose={() => setShowTaxonomyManager(false)}
+          onAddMedium={onAddMedium}
+          onUpdateMedium={onUpdateMedium}
+          onDeleteMedium={onDeleteMedium}
+          onAddAngle={onAddAngle}
+          onUpdateAngle={onUpdateAngle}
+          onDeleteAngle={onDeleteAngle}
         />
       )}
       {historyHook && (
         <HookUsageHistoryModal
           hook={historyHook}
-          type={
-            historyHook.hook_type
-              ? typeById.get(historyHook.hook_type)
-              : undefined
-          }
+          mediums={historyHook.medium_ids
+            .map((id) => mediumById.get(id))
+            .filter((medium): medium is HookMedium => Boolean(medium))}
+          angles={historyHook.angle_ids
+            .map((id) => angleById.get(id))
+            .filter((angle): angle is HookAngle => Boolean(angle))}
           onClose={() => setHistoryHook(null)}
         />
       )}
@@ -483,7 +514,8 @@ function FilterSelect({
 
 function HookCard({
   hook,
-  type,
+  mediums,
+  angles,
   accounts,
   layout,
   trash,
@@ -493,7 +525,8 @@ function HookCard({
   onRestore,
 }: {
   hook: HookItem
-  type?: HookType
+  mediums: HookMedium[]
+  angles: HookAngle[]
   accounts: Account[]
   layout: HookLayout
   trash: boolean
@@ -503,21 +536,22 @@ function HookCard({
   onRestore: () => void
 }) {
   const isList = layout === 'list'
+  const accentColor = angles[0]?.color ?? mediums[0]?.color
   return (
     <article
       className={`group overflow-hidden rounded-[24px] bg-white shadow-[var(--shadow-sm)] ring-1 ring-black/[0.035] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow)] ${
         isList ? 'flex min-h-36' : 'flex flex-col'
       }`}
       style={
-        !isList && type?.color
-          ? { boxShadow: `var(--shadow-sm), inset 0 2px 0 0 ${type.color}55` }
+        !isList && accentColor
+          ? { boxShadow: `var(--shadow-sm), inset 0 2px 0 0 ${accentColor}55` }
           : undefined
       }
     >
       <HookMediaPreview
         hook={hook}
         compact={isList}
-        accentColor={type?.color}
+        accentColor={accentColor}
       />
       <div className="flex min-w-0 flex-1 flex-col p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -527,10 +561,14 @@ function HookCard({
                 인박스
               </span>
             )}
-            {type ? (
-              <HookTypeBadge type={type} />
-            ) : (
-              <HookTypeBadge fallback="유형 미지정" />
+            {mediums.map((medium) => (
+              <HookMediumBadge key={medium.id} medium={medium} />
+            ))}
+            {angles.map((angle) => (
+              <HookAngleBadge key={angle.id} angle={angle} />
+            ))}
+            {mediums.length === 0 && angles.length === 0 && (
+              <HookAngleBadge fallback="분류 미지정" />
             )}
           </div>
           <div className="flex shrink-0 gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">

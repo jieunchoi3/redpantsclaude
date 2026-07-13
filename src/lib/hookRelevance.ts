@@ -1,4 +1,5 @@
-import type { HookItem, HookType, Idea } from '../types'
+import type { HookAngle, HookItem, HookMedium } from '../types'
+import type { Idea } from '../types'
 import type { Workspace } from './workspace'
 
 export type IdeaHookContext = {
@@ -11,13 +12,13 @@ export type IdeaHookContext = {
   channels: Idea['channels']
 }
 
-const FORMAT_TYPE_HINTS: Record<string, string[]> = {
+const FORMAT_MEDIUM_HINTS: Record<string, string[]> = {
   릴스: ['릴스'],
   카드뉴스: ['카드뉴스'],
-  스토리: ['릴스', '텍스트'],
-  롱폼: ['릴스', '텍스트'],
-  숏폼: ['릴스', '시각'],
-  포스트: ['텍스트', '카드뉴스'],
+  스토리: ['릴스', '시각'],
+  롱폼: ['릴스', '시각', '음성'],
+  숏폼: ['릴스', '시각', '음성'],
+  포스트: ['캡션', '카드뉴스', '텍스트'],
 }
 
 function activeFormats(context: IdeaHookContext): string[] {
@@ -28,19 +29,24 @@ function activeFormats(context: IdeaHookContext): string[] {
   return formats
 }
 
-function typeMatchesFormat(type: HookType | undefined, format: string): boolean {
-  if (!type) return false
-  const hints = FORMAT_TYPE_HINTS[format] ?? []
-  return hints.some((hint) => type.name.includes(hint))
+function mediumMatchesFormat(medium: HookMedium, format: string): boolean {
+  const hints = FORMAT_MEDIUM_HINTS[format] ?? []
+  return hints.some((hint) => medium.name.includes(hint))
 }
 
 export function scoreHookForIdea(
   hook: HookItem,
   context: IdeaHookContext,
-  typeById: Map<string, HookType>,
+  mediumById: Map<string, HookMedium>,
+  angleById: Map<string, HookAngle>,
 ): number {
   let score = 0
-  const type = hook.hook_type ? typeById.get(hook.hook_type) : undefined
+  const mediums = hook.medium_ids
+    .map((id) => mediumById.get(id))
+    .filter((medium): medium is HookMedium => Boolean(medium))
+  const angles = hook.angle_ids
+    .map((id) => angleById.get(id))
+    .filter((angle): angle is HookAngle => Boolean(angle))
 
   if (
     !context.accountId ||
@@ -51,8 +57,12 @@ export function scoreHookForIdea(
   }
 
   for (const format of activeFormats(context)) {
-    if (typeMatchesFormat(type, format)) score += 24
+    if (mediums.some((medium) => mediumMatchesFormat(medium, format))) {
+      score += 24
+    }
   }
+
+  if (angles.length > 0) score += 6
 
   if (context.categoryName && hook.content.includes(context.categoryName)) {
     score += 8

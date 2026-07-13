@@ -85,7 +85,7 @@ export interface ContentHook {
   updated_at: string
 }
 
-export interface HookType {
+export interface HookTaxonomy {
   id: string
   name: string
   description: string | null
@@ -93,6 +93,12 @@ export interface HookType {
   sort_order: number
   created_at: string
 }
+
+export type HookMedium = HookTaxonomy
+export type HookAngle = HookTaxonomy
+
+/** @deprecated Legacy single-axis type — use HookMedium / HookAngle */
+export type HookType = HookTaxonomy
 
 export interface HookUsage {
   id: string
@@ -109,6 +115,8 @@ export interface HookUsageWithIdea extends HookUsage {
 
 export interface HookItem extends ContentHook {
   account_ids: string[]
+  medium_ids: string[]
+  angle_ids: string[]
   average_rating: number | null
   usage_count: number
 }

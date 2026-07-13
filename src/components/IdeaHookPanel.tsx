@@ -20,8 +20,9 @@ import {
   scoreHookForIdea,
   type IdeaHookContext,
 } from '../lib/hookRelevance'
-import type { Account, HookItem, HookType, HookUsage } from '../types'
-import { HookAccountChips, HookTypeBadge } from './HookBadges'
+import type { Account, HookAngle, HookItem, HookMedium, HookUsage } from '../types'
+import { HookAccountChips, HookAngleBadge, HookMediumBadge } from './HookBadges'
+import { HookAxisFilterRow } from './HookAxisMultiSelect'
 
 interface IdeaHookPanelProps {
   ideaId: string
@@ -30,7 +31,8 @@ interface IdeaHookPanelProps {
   accountName: string | null
   context: IdeaHookContext
   hooks: HookItem[]
-  types: HookType[]
+  mediums: HookMedium[]
+  angles: HookAngle[]
   accounts: Account[]
   usages: HookUsage[]
   loading: boolean
@@ -50,7 +52,8 @@ export function IdeaHookPanel({
   accountName,
   context,
   hooks,
-  types,
+  mediums,
+  angles,
   accounts,
   usages,
   loading,
@@ -60,7 +63,8 @@ export function IdeaHookPanel({
   onUpdateUsage,
 }: IdeaHookPanelProps) {
   const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('all')
+  const [mediumFilter, setMediumFilter] = useState<Set<string>>(new Set())
+  const [angleFilter, setAngleFilter] = useState<Set<string>>(new Set())
   const [expanded, setExpanded] = useState(true)
   const [applyingId, setApplyingId] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
@@ -70,9 +74,13 @@ export function IdeaHookPanel({
   >(null)
   const [aiUsedFallback, setAiUsedFallback] = useState(false)
 
-  const typeById = useMemo(
-    () => new Map(types.map((type) => [type.id, type])),
-    [types],
+  const mediumById = useMemo(
+    () => new Map(mediums.map((medium) => [medium.id, medium])),
+    [mediums],
+  )
+  const angleById = useMemo(
+    () => new Map(angles.map((angle) => [angle.id, angle])),
+    [angles],
   )
   const accountById = useMemo(
     () => new Map(accounts.map((account) => [account.id, account])),
@@ -95,16 +103,23 @@ export function IdeaHookPanel({
         if (query && !hook.content.toLocaleLowerCase('ko').includes(query)) {
           return false
         }
-        if (typeFilter !== 'all' && hook.hook_type !== typeFilter) return false
+        if (mediumFilter.size > 0) {
+          const hasMedium = hook.medium_ids.some((id) => mediumFilter.has(id))
+          if (!hasMedium) return false
+        }
+        if (angleFilter.size > 0) {
+          const hasAngle = hook.angle_ids.some((id) => angleFilter.has(id))
+          if (!hasAngle) return false
+        }
         return true
       })
       .map((hook) => ({
         hook,
-        score: scoreHookForIdea(hook, context, typeById),
+        score: scoreHookForIdea(hook, context, mediumById, angleById),
       }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 24)
-  }, [context, hooks, search, typeById, typeFilter])
+  }, [angleById, angleFilter, context, hooks, mediumById, mediumFilter, search])
 
   const aiReasonById = useMemo(
     () => new Map((aiRecommendations ?? []).map((item) => [item.id, item.reason])),
@@ -129,20 +144,31 @@ export function IdeaHookPanel({
           accountName,
         },
         hooks,
-        types,
+        mediums,
+        angles,
       )
       if (result && result.length > 0) {
         setAiRecommendations(result)
         return
       }
-      const fallback = fallbackHookRecommendations(hooks, context, typeById)
+      const fallback = fallbackHookRecommendations(
+        hooks,
+        context,
+        mediumById,
+        angleById,
+      )
       setAiRecommendations(fallback)
       setAiUsedFallback(true)
       if (fallback.length === 0) {
         setAiError('추천할 훅이 없어요. 훅 라이브러리에 먼저 저장해 보세요.')
       }
     } catch (err) {
-      const fallback = fallbackHookRecommendations(hooks, context, typeById)
+      const fallback = fallbackHookRecommendations(
+        hooks,
+        context,
+        mediumById,
+        angleById,
+      )
       setAiRecommendations(fallback)
       setAiUsedFallback(true)
       setAiError(
@@ -223,7 +249,12 @@ export function IdeaHookPanel({
                       key={item.id}
                       hook={hook}
                       reason={item.reason}
-                      type={hook.hook_type ? typeById.get(hook.hook_type) : undefined}
+                      mediums={hook.medium_ids
+                        .map((id) => mediumById.get(id))
+                        .filter((medium): medium is HookMedium => Boolean(medium))}
+                      angles={hook.angle_ids
+                        .map((id) => angleById.get(id))
+                        .filter((angle): angle is HookAngle => Boolean(angle))}
                       usedHere={usedHookIds.has(hook.id)}
                       applying={applyingId === hook.id}
                       onInsert={() => void insertHook(hook)}
@@ -242,18 +273,38 @@ export function IdeaHookPanel({
               className="w-full rounded-xl bg-white py-2.5 pl-9 pr-3 text-[12px] outline-none ring-1 ring-black/[0.05] placeholder:text-[#b0b0b5] focus:ring-[#b49ba1]/35"
             />
           </label>
-          <select
-            value={typeFilter}
-            onChange={(event) => setTypeFilter(event.target.value)}
-            className="w-full rounded-xl bg-white px-3 py-2 text-[11px] text-[#5d5d62] outline-none ring-1 ring-black/[0.05]"
-          >
-            <option value="all">모든 유형</option>
-            {types.map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
+          <div className="space-y-1.5">
+            <HookAxisFilterRow
+              kind="medium"
+              label="매체"
+              items={mediums}
+              selectedIds={mediumFilter}
+              onToggle={(id) =>
+                setMediumFilter((current) => {
+                  const next = new Set(current)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }
+              onClear={() => setMediumFilter(new Set())}
+            />
+            <HookAxisFilterRow
+              kind="angle"
+              label="앵글"
+              items={angles}
+              selectedIds={angleFilter}
+              onToggle={(id) =>
+                setAngleFilter((current) => {
+                  const next = new Set(current)
+                  if (next.has(id)) next.delete(id)
+                  else next.add(id)
+                  return next
+                })
+              }
+              onClear={() => setAngleFilter(new Set())}
+            />
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -270,9 +321,12 @@ export function IdeaHookPanel({
           ) : (
             <div className="space-y-2">
               {rankedHooks.map(({ hook, score }) => {
-                const type = hook.hook_type
-                  ? typeById.get(hook.hook_type)
-                  : undefined
+                const hookMediums = hook.medium_ids
+                  .map((id) => mediumById.get(id))
+                  .filter((medium): medium is HookMedium => Boolean(medium))
+                const hookAngles = hook.angle_ids
+                  .map((id) => angleById.get(id))
+                  .filter((angle): angle is HookAngle => Boolean(angle))
                 const usedHere = usedHookIds.has(hook.id)
                 const hookAccounts = hook.account_ids
                   .map((id) => accountById.get(id))
@@ -284,11 +338,20 @@ export function IdeaHookPanel({
                   >
                     <div className="mb-2 flex items-start justify-between gap-2">
                       <div className="flex min-w-0 flex-wrap gap-1">
-                        <HookTypeBadge
-                          type={type}
-                          fallback="미지정"
-                          className="px-2 py-0.5 text-[9px]"
-                        />
+                        {hookMediums.map((medium) => (
+                          <HookMediumBadge
+                            key={medium.id}
+                            medium={medium}
+                            className="px-2 py-0.5 text-[9px]"
+                          />
+                        ))}
+                        {hookAngles.map((angle) => (
+                          <HookAngleBadge
+                            key={angle.id}
+                            angle={angle}
+                            className="px-2 py-0.5 text-[9px]"
+                          />
+                        ))}
                         {score >= 48 && !aiReasonById.has(hook.id) && (
                           <span className="rounded-full bg-[#eef5f1] px-2 py-0.5 text-[9px] font-medium text-[#5f7d6c]">
                             추천
@@ -383,14 +446,16 @@ export function IdeaHookPanel({
 function AiHookCard({
   hook,
   reason,
-  type,
+  mediums,
+  angles,
   usedHere,
   applying,
   onInsert,
 }: {
   hook: HookItem
   reason: string
-  type?: HookType
+  mediums: HookMedium[]
+  angles: HookAngle[]
   usedHere: boolean
   applying: boolean
   onInsert: () => void
@@ -398,11 +463,22 @@ function AiHookCard({
   return (
     <div className="rounded-xl bg-[#fafafa] p-2.5 ring-1 ring-black/[0.04]">
       <div className="mb-1 flex items-start justify-between gap-2">
-        <HookTypeBadge
-          type={type}
-          fallback="미지정"
-          className="px-2 py-0.5 text-[9px]"
-        />
+        <div className="flex min-w-0 flex-wrap gap-1">
+          {mediums.map((medium) => (
+            <HookMediumBadge
+              key={medium.id}
+              medium={medium}
+              className="px-2 py-0.5 text-[9px]"
+            />
+          ))}
+          {angles.map((angle) => (
+            <HookAngleBadge
+              key={angle.id}
+              angle={angle}
+              className="px-2 py-0.5 text-[9px]"
+            />
+          ))}
+        </div>
         {usedHere && (
           <span className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-[#eef5f1] px-1.5 py-0.5 text-[9px] font-semibold text-[#5f7d6c]">
             <Check className="h-3 w-3" />
