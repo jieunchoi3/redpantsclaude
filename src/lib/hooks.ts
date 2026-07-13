@@ -22,12 +22,20 @@ export type HookInput = {
   account_ids: string[]
 }
 
+export type HookFetchDiagnostic = {
+  table: string
+  status: number | null
+  rowCount: number
+  error: string | null
+}
+
 export type HookLibraryData = {
   hooks: HookItem[]
   types: HookType[]
   accounts: Account[]
   usages: HookUsage[]
   error: string | null
+  diagnostics: HookFetchDiagnostic[]
 }
 
 function buildHookTypeIndex(types: HookType[]) {
@@ -50,6 +58,85 @@ export function resolveHookTypeId(
   return byName.get(trimmed) ?? trimmed
 }
 
+function formatFetchError(error: {
+  code?: string
+  message?: string
+  details?: string
+  hint?: string
+}): string {
+  const parts = [
+    error.code ? `[${error.code}]` : null,
+    error.message ?? 'Unknown error',
+    error.details ? `details: ${error.details}` : null,
+    error.hint ? `hint: ${error.hint}` : null,
+  ].filter(Boolean)
+  return parts.join(' ')
+}
+
+function diagnosticFromResult(
+  table: string,
+  result: {
+    data: unknown[] | null
+    error: {
+      code?: string
+      message?: string
+      details?: string
+      hint?: string
+    } | null
+    status?: number
+    statusText?: string
+  },
+): HookFetchDiagnostic {
+  return {
+    table,
+    status: result.status ?? null,
+    rowCount: result.data?.length ?? 0,
+    error: result.error ? formatFetchError(result.error) : null,
+  }
+}
+
+function buildHookFetchError(
+  diagnostics: HookFetchDiagnostic[],
+  types: HookType[],
+  hooks: ContentHook[],
+): string | null {
+  const failures = diagnostics.filter((entry) => entry.error)
+  if (failures.length > 0) {
+    return failures
+      .map(
+        (entry) =>
+          `${entry.table}: HTTP ${entry.status ?? '?'} — ${entry.error}`,
+      )
+      .join('\n')
+  }
+
+  if (types.length > 0) return null
+
+  const typesDiag = diagnostics.find((entry) => entry.table === TABLES.hookTypes)
+  const hooksDiag = diagnostics.find((entry) => entry.table === TABLES.hooks)
+  const projectHost = (() => {
+    try {
+      return new URL(import.meta.env.VITE_SUPABASE_URL as string).host
+    } catch {
+      return 'unknown'
+    }
+  })()
+
+  const lines = [
+    `cp_hook_types: ${typesDiag?.rowCount ?? 0} rows (HTTP ${typesDiag?.status ?? '?'})`,
+    `cp_hooks: ${hooksDiag?.rowCount ?? hooks.length} rows (HTTP ${hooksDiag?.status ?? '?'})`,
+    `Supabase project: ${projectHost}`,
+  ]
+
+  if ((typesDiag?.rowCount ?? 0) === 0) {
+    lines.push(
+      'SQL Editor에 데이터가 보이는데 앱이 0건이면 RLS 정책이 빠졌을 수 있어요. supabase/v3_hook_library.sql 84–95행(anon all 정책)을 실행하세요.',
+    )
+  }
+
+  return lines.join('\n')
+}
+
 export async function fetchHookLibrary(): Promise<HookLibraryData> {
   const sb = getSupabase()
   if (!sb) {
@@ -58,7 +145,8 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
       types: [],
       accounts: [],
       usages: [],
-      error: 'Supabase 미설정',
+      error: 'Supabase 미설정 — VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 확인',
+      diagnostics: [],
     }
   }
 
@@ -80,28 +168,29 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
         .order('sort_order', { ascending: true }),
     ])
 
-  const firstError =
-    hookResult.error ??
-    typeResult.error ??
-    linkResult.error ??
-    usageResult.error ??
-    accountResult.error
-  if (firstError) {
-    console.warn('[hook-library] fetch error:', firstError.message)
-    return {
-      hooks: [],
-      types: [],
-      accounts: (accountResult.data ?? []) as Account[],
-      usages: [],
-      error: firstError.message,
-    }
-  }
+  const diagnostics: HookFetchDiagnostic[] = [
+    diagnosticFromResult(TABLES.hooks, hookResult),
+    diagnosticFromResult(TABLES.hookTypes, typeResult),
+    diagnosticFromResult(TABLES.hookAccounts, linkResult),
+    diagnosticFromResult(TABLES.hookUsages, usageResult),
+    diagnosticFromResult(TABLES.accounts, accountResult),
+  ]
 
-  const links = (linkResult.data ?? []) as {
+  console.info('[hook-library] fetch diagnostics:', diagnostics)
+
+  const types = (typeResult.error ? [] : (typeResult.data ?? [])) as HookType[]
+  const hookRows = (hookResult.error ? [] : (hookResult.data ?? [])) as ContentHook[]
+  const links = (linkResult.error ? [] : (linkResult.data ?? [])) as {
     hook_id: string
     account_id: string
   }[]
-  const usages = (usageResult.data ?? []) as HookUsage[]
+  const usages = (usageResult.error ? [] : (usageResult.data ?? [])) as HookUsage[]
+  const accounts = (accountResult.error ? [] : (accountResult.data ?? [])) as Account[]
+  const error = buildHookFetchError(diagnostics, types, hookRows)
+
+  if (error) {
+    console.warn('[hook-library] fetch issue:', error, diagnostics)
+  }
   const accountIdsByHook = new Map<string, string[]>()
   const usagesByHook = new Map<string, HookUsage[]>()
 
@@ -116,9 +205,7 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
     usagesByHook.set(usage.hook_id, current)
   }
 
-  const types = (typeResult.data ?? []) as HookType[]
-
-  const hooks = ((hookResult.data ?? []) as ContentHook[]).map((hook) => {
+  const hooks = hookRows.map((hook) => {
     const hookUsages = usagesByHook.get(hook.id) ?? []
     const ratings = hookUsages
       .map((usage) => usage.rating)
@@ -138,9 +225,10 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
   return {
     hooks,
     types,
-    accounts: (accountResult.data ?? []) as Account[],
+    accounts,
     usages,
-    error: null,
+    error,
+    diagnostics,
   }
 }
 

@@ -16,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { Account, HookItem, HookType } from '../types'
-import type { HookInput } from '../lib/hooks'
+import type { HookFetchDiagnostic, HookInput } from '../lib/hooks'
 import { hookTypeBadgeStyle } from '../lib/hookUi'
 import { HookAccountChips, HookTypeBadge } from './HookBadges'
 import { HookEditorModal } from './HookEditorModal'
@@ -33,6 +33,7 @@ interface HookLibraryProps {
   accounts: Account[]
   loading: boolean
   error: string | null
+  diagnostics: HookFetchDiagnostic[]
   onAdd: (input: HookInput) => Promise<boolean>
   onUpdate: (id: string, input: HookInput) => Promise<boolean>
   onArchive: (id: string) => Promise<boolean>
@@ -55,6 +56,7 @@ export function HookLibrary({
   accounts,
   loading,
   error,
+  diagnostics,
   onAdd,
   onUpdate,
   onArchive,
@@ -340,16 +342,32 @@ export function HookLibrary({
       {error ? (
         <div className="rounded-[24px] border border-[#e9d8dc] bg-[#fff9fa] p-7 text-center">
           <p className="text-[14px] font-semibold text-[#76545e]">
-            훅 데이터베이스를 연결해 주세요
+            훅 데이터를 불러오지 못했어요
           </p>
           <p className="mx-auto mt-2 max-w-xl text-[12px] leading-5 text-[#927680]">
             Supabase SQL Editor에서{' '}
             <code className="rounded bg-white px-1.5 py-0.5">
               supabase/v3_hook_library.sql
+            </code>{' '}
+            또는{' '}
+            <code className="rounded bg-white px-1.5 py-0.5">
+              supabase/v3_hook_rls_fix.sql
             </code>
-            을 실행하면 훅과 미디어 버킷이 준비됩니다.
+            을 실행해 주세요.
           </p>
-          <p className="mt-2 text-[10px] text-[#ae929a]">{error}</p>
+          <pre className="mx-auto mt-3 max-w-2xl whitespace-pre-wrap break-words rounded-xl bg-white px-4 py-3 text-left font-mono text-[10px] leading-5 text-[#a45a5a]">
+            {error}
+          </pre>
+          {diagnostics.length > 0 && (
+            <details className="mx-auto mt-3 max-w-2xl text-left">
+              <summary className="cursor-pointer text-[11px] font-medium text-[#8e8e93]">
+                테이블별 raw 응답
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-xl bg-[#f5f5f7] px-3 py-2 font-mono text-[10px] leading-5 text-[#6e6e73]">
+                {JSON.stringify(diagnostics, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       ) : visibleHooks.length === 0 ? (
         <HookEmptyState
@@ -410,6 +428,9 @@ export function HookLibrary({
         <HookTypeManagerModal
           types={types}
           hooks={hooks}
+          loading={loading}
+          fetchError={error}
+          diagnostics={diagnostics}
           onClose={() => setShowTypeManager(false)}
           onAdd={onAddType}
           onUpdate={onUpdateType}

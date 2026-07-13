@@ -43,7 +43,10 @@ interface IdeaBoardProps {
   categories: Category[]
   search: SmartSearchState
   onOpenIdea: (idea: Idea) => void
-  onCreateIdea: () => void
+  onCreateIdea: (preset?: {
+    categoryId?: string | null
+    accountId?: string | null
+  }) => void
   onStatusChange: (ideaId: string, status: IdeaStatus) => Promise<unknown>
   onCategoryChange: (
     ideaId: string,
@@ -251,7 +254,7 @@ export function IdeaBoard({
 
         <button
           type="button"
-          onClick={onCreateIdea}
+          onClick={() => onCreateIdea()}
           className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#1d1d1f] px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-black active:scale-[0.98]"
         >
           <Plus className="h-4 w-4" />
@@ -267,7 +270,7 @@ export function IdeaBoard({
           action={
             <button
               type="button"
-              onClick={onCreateIdea}
+              onClick={() => onCreateIdea()}
               className="rounded-xl bg-[#1d1d1f] px-4 py-2 text-[13px] font-medium text-white"
             >
               아이디어 추가
@@ -313,6 +316,7 @@ export function IdeaBoard({
                   accountMap={accountMap}
                   onOpenIdea={onOpenIdea}
                   onDeleteIdea={onDeleteIdea}
+                  onCreateIdea={() => onCreateIdea({ accountId: account.id })}
                 />
               ))}
               {(byAccount.get(UNCATEGORIZED_ID)?.length ?? 0) > 0 && (
@@ -324,6 +328,7 @@ export function IdeaBoard({
                   accountMap={accountMap}
                   onOpenIdea={onOpenIdea}
                   onDeleteIdea={onDeleteIdea}
+                  onCreateIdea={() => onCreateIdea({ accountId: null })}
                 />
               )}
             </div>
@@ -338,6 +343,7 @@ export function IdeaBoard({
                   categoryMap={categoryMap}
                   onOpenIdea={onOpenIdea}
                   onDeleteIdea={onDeleteIdea}
+                  onCreateIdea={() => onCreateIdea({ categoryId: cat.id })}
                 />
               ))}
 
@@ -354,6 +360,7 @@ export function IdeaBoard({
                   categoryMap={categoryMap}
                   onOpenIdea={onOpenIdea}
                   onDeleteIdea={onDeleteIdea}
+                  onCreateIdea={() => onCreateIdea({ categoryId: cat.id })}
                 />
               ))}
 
@@ -364,6 +371,7 @@ export function IdeaBoard({
                 categoryMap={categoryMap}
                 onOpenIdea={onOpenIdea}
                 onDeleteIdea={onDeleteIdea}
+                onCreateIdea={() => onCreateIdea({ categoryId: null })}
               />
             </div>
           )}
@@ -483,6 +491,7 @@ function AccountColumn({
   accountMap,
   onOpenIdea,
   onDeleteIdea,
+  onCreateIdea,
 }: {
   account: Account | null
   color: string
@@ -491,6 +500,7 @@ function AccountColumn({
   accountMap: Record<string, Account>
   onOpenIdea: (idea: Idea) => void
   onDeleteIdea: (ideaId: string) => Promise<unknown>
+  onCreateIdea: () => void
 }) {
   const dropId = account
     ? `account-${account.id}`
@@ -504,7 +514,7 @@ function AccountColumn({
     <div
       ref={setNodeRef}
       data-account-column={account?.id ?? 'unassigned'}
-      className={`flex w-[min(16rem,85vw)] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white/80 shadow-[var(--shadow-sm)] transition-all duration-200 ${
+      className={`group/col flex w-[min(16rem,85vw)] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white/80 shadow-[var(--shadow-sm)] transition-all duration-200 ${
         isOver ? 'bg-white ring-2 ring-[#1d1d1f]/10' : ''
       }`}
     >
@@ -520,6 +530,19 @@ function AccountColumn({
           <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1d1d1f]">
             {account?.name ?? '계정 미지정'}
           </p>
+          <button
+            type="button"
+            onClick={onCreateIdea}
+            title={`${account?.name ?? '계정 미지정'}에 아이디어 추가`}
+            aria-label={`${account?.name ?? '계정 미지정'}에 아이디어 추가`}
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#aeaeb2] transition hover:bg-white/90 hover:text-[#1d1d1f] ${
+              ideas.length === 0
+                ? 'opacity-100'
+                : 'opacity-0 group-hover/col:opacity-100'
+            }`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
           <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-[#6e6e73]">
             {ideas.length}
           </span>
@@ -551,6 +574,7 @@ function CategoryColumn({
   categoryMap,
   onOpenIdea,
   onDeleteIdea,
+  onCreateIdea,
 }: {
   category: Category | null
   accent: CategoryAccent
@@ -558,6 +582,7 @@ function CategoryColumn({
   categoryMap: Record<string, Category>
   onOpenIdea: (idea: Idea) => void
   onDeleteIdea: (ideaId: string) => Promise<unknown>
+  onCreateIdea: () => void
 }) {
   const dropId = category
     ? `category-${category.id}`
@@ -576,7 +601,7 @@ function CategoryColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-[min(16rem,85vw)] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white/80 shadow-[var(--shadow-sm)] transition-colors duration-200 ${
+      className={`group/col flex w-[min(16rem,85vw)] shrink-0 snap-start flex-col overflow-hidden rounded-2xl bg-white/80 shadow-[var(--shadow-sm)] transition-colors duration-200 ${
         isOver ? 'ring-2 ring-[#1d1d1f]/10' : ''
       }`}
     >
@@ -604,6 +629,19 @@ function CategoryColumn({
           >
             {title}
           </p>
+          <button
+            type="button"
+            onClick={onCreateIdea}
+            title={`${title}에 아이디어 추가`}
+            aria-label={`${title}에 아이디어 추가`}
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#aeaeb2] transition hover:bg-white/90 hover:text-[#1d1d1f] ${
+              ideas.length === 0
+                ? 'opacity-100'
+                : 'opacity-0 group-hover/col:opacity-100'
+            }`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
           <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-[#6e6e73]">
             {ideas.length}
           </span>

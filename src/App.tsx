@@ -168,17 +168,23 @@ function PlannerApp({
   async function handleCreateIdea(
     scheduledDate?: string | null,
     accountId?: string | null,
+    categoryId?: string | null,
   ) {
     const presetAccountId =
       accountId ??
       (workspace === 'jieun' && selectedAccountIds.length === 1
         ? selectedAccountIds[0]!
         : null)
+    const category = categoryId
+      ? categories.find((item) => item.id === categoryId)
+      : null
     const created = await addIdea({
       title: '제목 없음',
       scheduled_date: scheduledDate ?? null,
       status: '기획하기',
       account_id: presetAccountId,
+      category_id: categoryId ?? null,
+      channels: category ? [category.channel] : [],
       jieun_channel: workspace === 'jieun' ? '인스타그램' : null,
       jieun_format: workspace === 'jieun' ? '릴스' : null,
     })
@@ -320,6 +326,7 @@ function PlannerApp({
                 accounts={hookLibrary.hookAccounts}
                 loading={hookLibrary.loading}
                 error={hookLibrary.error}
+                diagnostics={hookLibrary.diagnostics}
                 onAdd={hookLibrary.addHook}
                 onUpdate={hookLibrary.patchHook}
                 onArchive={hookLibrary.archiveHook}
@@ -346,7 +353,13 @@ function PlannerApp({
                 categories={categories}
                 search={boardSearch}
                 onOpenIdea={openIdea}
-                onCreateIdea={() => void handleCreateIdea()}
+                onCreateIdea={(preset) =>
+                  void handleCreateIdea(
+                    null,
+                    preset?.accountId,
+                    preset?.categoryId,
+                  )
+                }
                 onStatusChange={(id, status) => patchIdea(id, { status })}
                 onCategoryChange={(id, categoryId) =>
                   patchIdea(id, { category_id: categoryId })

@@ -1,5 +1,6 @@
 import { Loader2, Palette, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import type { HookFetchDiagnostic } from '../lib/hooks'
 import type { HookItem, HookType } from '../types'
 
 const DEFAULT_COLORS = [
@@ -14,6 +15,9 @@ const DEFAULT_COLORS = [
 interface HookTypeManagerModalProps {
   types: HookType[]
   hooks: HookItem[]
+  loading: boolean
+  fetchError: string | null
+  diagnostics: HookFetchDiagnostic[]
   onClose: () => void
   onAdd: (input: {
     name: string
@@ -30,6 +34,9 @@ interface HookTypeManagerModalProps {
 export function HookTypeManagerModal({
   types,
   hooks,
+  loading,
+  fetchError,
+  diagnostics,
   onClose,
   onAdd,
   onUpdate,
@@ -187,9 +194,40 @@ export function HookTypeManagerModal({
 
           {types.length === 0 && !editingId && (
             <div className="rounded-2xl border border-dashed border-black/10 bg-white/55 px-5 py-10 text-center">
-              <p className="text-[13px] font-medium text-[#6e6e73]">
-                아직 등록된 유형이 없어요
-              </p>
+              {loading ? (
+                <>
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin text-[#9b8990]" />
+                  <p className="mt-3 text-[13px] font-medium text-[#6e6e73]">
+                    훅 유형을 불러오는 중…
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-[13px] font-medium text-[#6e6e73]">
+                    아직 등록된 유형이 없어요
+                  </p>
+                  {fetchError && (
+                    <div className="mx-auto mt-4 max-w-lg rounded-xl bg-[#fff4f4] px-4 py-3 text-left">
+                      <p className="text-[11px] font-semibold text-[#8f4d57]">
+                        Supabase fetch 응답
+                      </p>
+                      <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-[10px] leading-5 text-[#a45a5a]">
+                        {fetchError}
+                      </pre>
+                    </div>
+                  )}
+                  {diagnostics.length > 0 && (
+                    <details className="mx-auto mt-3 max-w-lg text-left">
+                      <summary className="cursor-pointer text-[11px] font-medium text-[#8e8e93]">
+                        테이블별 raw 응답 보기
+                      </summary>
+                      <pre className="mt-2 max-h-40 overflow-auto rounded-xl bg-[#f5f5f7] px-3 py-2 font-mono text-[10px] leading-5 text-[#6e6e73]">
+                        {JSON.stringify(diagnostics, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </>
+              )}
             </div>
           )}
 

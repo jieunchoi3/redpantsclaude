@@ -22,6 +22,9 @@ export function useHookLibrary() {
   const [usages, setUsages] = useState<HookUsage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [diagnostics, setDiagnostics] = useState<
+    Awaited<ReturnType<typeof fetchHookLibrary>>['diagnostics']
+  >([])
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -31,6 +34,7 @@ export function useHookLibrary() {
     setHookAccounts(data.accounts)
     setUsages(data.usages)
     setError(data.error)
+    setDiagnostics(data.diagnostics)
     setLoading(false)
   }, [])
 
@@ -152,6 +156,7 @@ export function useHookLibrary() {
     usages,
     loading,
     error,
+    diagnostics,
     addHook,
     patchHook,
     archiveHook,
