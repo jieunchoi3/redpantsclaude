@@ -30,6 +30,26 @@ export type HookLibraryData = {
   error: string | null
 }
 
+function buildHookTypeIndex(types: HookType[]) {
+  const byId = new Map(types.map((type) => [type.id, type]))
+  const byName = new Map(types.map((type) => [type.name.trim(), type.id]))
+  return { byId, byName }
+}
+
+/** Seeds may store cp_hooks.hook_type as a type id or type name. */
+export function resolveHookTypeId(
+  hookType: string | null | undefined,
+  types: HookType[],
+): string | null {
+  if (!hookType) return null
+  const trimmed = hookType.trim()
+  if (!trimmed) return null
+
+  const { byId, byName } = buildHookTypeIndex(types)
+  if (byId.has(trimmed)) return trimmed
+  return byName.get(trimmed) ?? trimmed
+}
+
 export async function fetchHookLibrary(): Promise<HookLibraryData> {
   const sb = getSupabase()
   if (!sb) {
@@ -96,6 +116,8 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
     usagesByHook.set(usage.hook_id, current)
   }
 
+  const types = (typeResult.data ?? []) as HookType[]
+
   const hooks = ((hookResult.data ?? []) as ContentHook[]).map((hook) => {
     const hookUsages = usagesByHook.get(hook.id) ?? []
     const ratings = hookUsages
@@ -103,6 +125,7 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
       .filter((rating): rating is number => typeof rating === 'number')
     return {
       ...hook,
+      hook_type: resolveHookTypeId(hook.hook_type, types),
       account_ids: accountIdsByHook.get(hook.id) ?? [],
       usage_count: Math.max(hook.used_count ?? 0, hookUsages.length),
       average_rating:
@@ -114,7 +137,7 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
 
   return {
     hooks,
-    types: (typeResult.data ?? []) as HookType[],
+    types,
     accounts: (accountResult.data ?? []) as Account[],
     usages,
     error: null,

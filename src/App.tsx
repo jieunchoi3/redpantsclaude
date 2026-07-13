@@ -31,6 +31,8 @@ import { useSmartSearch } from './hooks/useSmartSearch'
 import type { PlacementSuggestion } from './lib/autoPlace'
 import type { CalendarFilters } from './lib/calendarFilters'
 import {
+  documentTitle,
+  normalizeWorkspaceUrl,
   workspaceFromUrl,
   writeWorkspaceToUrl,
   type Workspace,
@@ -51,21 +53,31 @@ export default function App() {
   )
 
   useEffect(() => {
+    normalizeWorkspaceUrl(workspace)
+  }, [workspace])
+
+  useEffect(() => {
+    document.title = documentTitle(workspace)
+  }, [workspace])
+
+  useEffect(() => {
     function handlePopState() {
-      setWorkspace(workspaceFromUrl())
+      const next = workspaceFromUrl()
+      setWorkspace(next)
+      normalizeWorkspaceUrl(next)
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   function enterWorkspace(nextWorkspace: Workspace) {
-    writeWorkspaceToUrl(nextWorkspace)
     setWorkspace(nextWorkspace)
+    writeWorkspaceToUrl(nextWorkspace)
   }
 
   function exitWorkspace() {
-    writeWorkspaceToUrl(null)
     setWorkspace(null)
+    writeWorkspaceToUrl(null)
   }
 
   if (!workspace) {

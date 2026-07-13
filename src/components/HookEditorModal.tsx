@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ClipboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent } from 'react'
 import {
   Check,
   ChevronDown,
@@ -26,6 +26,7 @@ import type {
   HookType,
 } from '../types'
 import type { HookInput } from '../lib/hooks'
+import { hookTypeBadgeStyle } from '../lib/hookUi'
 import { HookImageExtractPanel } from './HookImageExtractPanel'
 
 const TYPE_COLORS = [
@@ -93,6 +94,30 @@ export function HookEditorModal({
   const [classifying, setClassifying] = useState(false)
   const [variating, setVariating] = useState(false)
   const [variations, setVariations] = useState<string[]>([])
+  const [typeMenuOpen, setTypeMenuOpen] = useState(false)
+  const typeMenuRef = useRef<HTMLDivElement | null>(null)
+
+  const selectedType = useMemo(
+    () => types.find((type) => type.id === hookType),
+    [hookType, types],
+  )
+
+  useEffect(() => {
+    if (!typeMenuOpen) return
+    function onPointerDown(event: MouseEvent) {
+      if (typeMenuRef.current?.contains(event.target as Node)) return
+      setTypeMenuOpen(false)
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setTypeMenuOpen(false)
+    }
+    window.addEventListener('mousedown', onPointerDown)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [typeMenuOpen])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -312,6 +337,17 @@ export function HookEditorModal({
                 placeholder="첫 3초 안에 시선을 잡을 문구나 영상 공식을 적어보세요."
                 className="w-full resize-none rounded-2xl border-0 bg-white px-4 py-3.5 text-[15px] leading-6 text-[#1d1d1f] shadow-sm outline-none ring-1 ring-black/[0.05] transition placeholder:text-[#b0b0b5] focus:ring-2 focus:ring-[#b49ba1]/45"
               />
+              <label className="mt-3 block">
+                <span className="mb-2 block text-[13px] font-semibold text-[#3a3a3c]">
+                  추가 메모
+                </span>
+                <input
+                  value={sourceNote}
+                  onChange={(event) => setSourceNote(event.target.value)}
+                  placeholder="참고할 점, 느낌, 맥락 등"
+                  className="w-full rounded-2xl border-0 bg-white px-4 py-3 text-[14px] text-[#1d1d1f] shadow-sm outline-none ring-1 ring-black/[0.05] placeholder:text-[#b0b0b5] focus:ring-2 focus:ring-[#b49ba1]/45"
+                />
+              </label>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -394,25 +430,129 @@ export function HookEditorModal({
                   </button>
                 </div>
               </div>
-              <select
-                value={hookType}
-                onChange={(event) => {
-                  if (event.target.value === '__manage__') {
-                    setShowTypeManager(true)
-                    return
-                  }
-                  setHookType(event.target.value)
-                }}
-                className="w-full appearance-none rounded-2xl border-0 bg-white px-4 py-3 text-[14px] text-[#1d1d1f] shadow-sm outline-none ring-1 ring-black/[0.05]"
-              >
-                <option value="">미지정</option>
-                {types.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-                <option value="__manage__">＋ 유형 추가 및 관리…</option>
-              </select>
+              <div ref={typeMenuRef} className="relative">
+                <button
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded={typeMenuOpen}
+                  onClick={() => setTypeMenuOpen((current) => !current)}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition ${
+                    typeMenuOpen
+                      ? 'bg-white shadow-sm ring-2 ring-[#b49ba1]/35'
+                      : 'bg-white shadow-sm ring-1 ring-black/[0.05] hover:ring-black/[0.08]'
+                  }`}
+                >
+                  {selectedType ? (
+                    <span
+                      className="inline-flex max-w-full items-center gap-2 truncate rounded-full px-3 py-1 text-[12px] font-semibold"
+                      style={hookTypeBadgeStyle(selectedType)}
+                    >
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor: selectedType.color ?? '#b8b8bd',
+                        }}
+                      />
+                      {selectedType.name}
+                    </span>
+                  ) : (
+                    <span className="text-[14px] text-[#aeaeb2]">미지정</span>
+                  )}
+                  <ChevronDown
+                    className={`ml-auto h-4 w-4 shrink-0 text-[#aeaeb2] transition ${
+                      typeMenuOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {typeMenuOpen && (
+                  <ul
+                    role="listbox"
+                    className="absolute left-0 right-0 top-[calc(100%+8px)] z-20 max-h-64 overflow-y-auto rounded-2xl bg-white p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.12)] ring-1 ring-black/[0.06]"
+                  >
+                    <li>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={!hookType}
+                        onClick={() => {
+                          setHookType('')
+                          setTypeMenuOpen(false)
+                        }}
+                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] transition ${
+                          !hookType
+                            ? 'bg-[#f5f5f7] font-semibold text-[#1d1d1f]'
+                            : 'text-[#6e6e73] hover:bg-[#f7f7f8]'
+                        }`}
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#d1d1d6]" />
+                        <span className="flex-1">미지정</span>
+                        {!hookType && <Check className="h-3.5 w-3.5 opacity-70" />}
+                      </button>
+                    </li>
+                    {types.map((type) => {
+                      const active = hookType === type.id
+                      return (
+                        <li key={type.id}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            onClick={() => {
+                              setHookType(type.id)
+                              setTypeMenuOpen(false)
+                            }}
+                            className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition ${
+                              active
+                                ? 'bg-[#f5f5f7]'
+                                : 'hover:bg-[#f7f7f8]'
+                            }`}
+                          >
+                            <span
+                              className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/80"
+                              style={{
+                                backgroundColor: type.color ?? '#b8b8bd',
+                              }}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className={`block truncate text-[13px] ${
+                                  active
+                                    ? 'font-semibold text-[#1d1d1f]'
+                                    : 'font-medium text-[#3a3a3c]'
+                                }`}
+                              >
+                                {type.name}
+                              </span>
+                              {type.description && (
+                                <span className="mt-0.5 block line-clamp-2 text-[11px] leading-4 text-[#8e8e93]">
+                                  {type.description}
+                                </span>
+                              )}
+                            </span>
+                            {active && (
+                              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+                            )}
+                          </button>
+                        </li>
+                      )
+                    })}
+                    <li className="mt-1 border-t border-black/[0.05] pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTypeMenuOpen(false)
+                          setShowTypeManager(true)
+                        }}
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[12px] font-medium text-[#7c6870] transition hover:bg-[#f5f5f7]"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        유형 추가 및 관리
+                      </button>
+                    </li>
+                  </ul>
+                )}
+              </div>
               {showTypeManager && (
                 <HookTypeManager
                   types={types}
@@ -565,22 +705,15 @@ export function HookEditorModal({
               )}
             </div>
 
-            <label className="block">
-              <span className="mb-2 block text-[13px] font-semibold text-[#3a3a3c]">
-                출처 메모
-              </span>
-              <input
-                value={sourceNote}
-                onChange={(event) => setSourceNote(event.target.value)}
-                placeholder="어디서 봤는지, 참고할 점 등"
-                className="w-full rounded-2xl border-0 bg-white px-4 py-3 text-[14px] text-[#1d1d1f] shadow-sm outline-none ring-1 ring-black/[0.05] placeholder:text-[#b0b0b5] focus:ring-2 focus:ring-[#b49ba1]/45"
-              />
-            </label>
+            {error && (
+              <p className="rounded-xl bg-[#fff4f4] px-3 py-2 text-[11px] leading-5 text-[#a45a5a]">
+                {error}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-black/[0.06] bg-white/90 px-5 py-4 backdrop-blur-xl sm:px-7">
-          <p className="min-w-0 text-[11px] text-[#c75d6d]">{error}</p>
+        <div className="flex items-center justify-end gap-3 border-t border-black/[0.06] bg-white/90 px-5 py-4 backdrop-blur-xl sm:px-7">
           <div className="flex shrink-0 gap-2">
             <button
               type="button"

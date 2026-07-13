@@ -564,7 +564,7 @@ function HookCard({
 
         {hook.source_note && (
           <p className="mt-2 line-clamp-1 text-[11px] text-[#9a9a9f]">
-            출처 · {hook.source_note}
+            추가 메모 · {hook.source_note}
           </p>
         )}
 
