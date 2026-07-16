@@ -78,11 +78,28 @@ export function isWorkspaceColumnMissing(error: {
   code?: string
   message?: string
 } | null): boolean {
+  return isMissingColumn(error, 'workspace')
+}
+
+export function isMissingColumn(
+  error: { code?: string; message?: string } | null,
+  column: string,
+): boolean {
   return Boolean(
     error &&
       (error.code === '42703' ||
         (error.message?.includes('column') &&
-          error.message.includes('workspace') &&
-          error.message.includes('does not exist'))),
+          error.message.includes(column) &&
+          error.message.includes('does not exist')) ||
+        (error.message?.includes(`'${column}'`) &&
+          error.message.includes('schema cache'))),
   )
+}
+
+/** Treat empty strings like null for optional uuid fields. */
+export function nullIfEmpty(
+  value: string | null | undefined,
+): string | null {
+  if (value == null || value.trim() === '') return null
+  return value
 }

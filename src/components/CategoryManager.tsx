@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 import type { Category, Channel } from '../types'
+import type { CategoryCreateResult } from '../lib/categories'
 import type { Workspace } from '../lib/workspace'
 
 interface CategoryManagerProps {
@@ -8,7 +9,7 @@ interface CategoryManagerProps {
   workspace: Workspace
   accountId?: string | null
   accountName?: string
-  onAdd: (name: string, channel: Channel) => Promise<unknown>
+  onAdd: (name: string, channel: Channel) => Promise<CategoryCreateResult>
   onRename: (id: string, name: string) => Promise<unknown>
   onDelete: (id: string) => Promise<unknown>
   onClose: () => void
@@ -29,6 +30,7 @@ export function CategoryManager({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const filtered = categories
     .filter((category) =>
@@ -41,16 +43,39 @@ export function CategoryManager({
   async function handleAdd() {
     const name = newName.trim()
     if (!name || busy) return
+    if (workspace === 'jieun' && !accountId) {
+      setError('계정을 먼저 선택해 주세요.')
+      return
+    }
+
     setBusy(true)
-    await onAdd(name, channel)
-    setNewName('')
-    setBusy(false)
+    setError(null)
+    try {
+      const result = await onAdd(name, channel)
+      if (result.category) {
+        setNewName('')
+      } else {
+        setError(
+          result.error ??
+            '카테고리를 저장하지 못했어요. Supabase 설정을 확인해 주세요.',
+        )
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : '카테고리를 저장하지 못했어요.',
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleRename(id: string) {
     const name = editName.trim()
     if (!name || busy) return
     setBusy(true)
+    setError(null)
     await onRename(id, name)
     setEditingId(null)
     setBusy(false)
@@ -60,6 +85,7 @@ export function CategoryManager({
     if (busy) return
     if (!window.confirm('이 카테고리를 삭제할까요?')) return
     setBusy(true)
+    setError(null)
     await onDelete(id)
     setBusy(false)
   }
@@ -87,26 +113,33 @@ export function CategoryManager({
 
         {workspace === 'redpants' && (
           <div className="mb-4 inline-flex rounded-xl bg-[#f5f5f7] p-1">
-          {(
-            [
-              { id: 'instagram', label: '인스타그램' },
-              { id: 'youtube', label: '유튜브' },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setChannel(tab.id)}
-              className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${
-                channel === tab.id
-                  ? 'bg-white text-[#1d1d1f] shadow-sm'
-                  : 'text-[#6e6e73]'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+            {(
+              [
+                { id: 'instagram', label: '인스타그램' },
+                { id: 'youtube', label: '유튜브' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setChannel(tab.id)}
+                className={`rounded-lg px-3 py-1.5 text-[13px] font-medium transition ${
+                  channel === tab.id
+                    ? 'bg-white text-[#1d1d1f] shadow-sm'
+                    : 'text-[#6e6e73]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
+        )}
+
+        {workspace === 'jieun' && !accountId && (
+          <p className="mb-3 rounded-xl bg-[#fff4f4] px-3 py-2 text-[11px] leading-5 text-[#a45a5a]">
+            계정이 선택되지 않았어요. 아이디어에서 계정을 먼저 선택한 뒤 다시
+            시도해 주세요.
+          </p>
         )}
 
         <ul className="mb-4 max-h-64 space-y-2 overflow-y-auto">
@@ -175,6 +208,12 @@ export function CategoryManager({
           ))}
         </ul>
 
+        {error && (
+          <pre className="mb-3 max-h-32 overflow-auto whitespace-pre-wrap rounded-xl bg-[#fff4f4] px-3 py-2 text-[10px] leading-4 text-[#a45a5a]">
+            {error}
+          </pre>
+        )}
+
         <div className="flex gap-2">
           <input
             value={newName}
@@ -188,7 +227,11 @@ export function CategoryManager({
           <button
             type="button"
             onClick={() => void handleAdd()}
-            disabled={!newName.trim() || busy}
+            disabled={
+              !newName.trim() ||
+              busy ||
+              (workspace === 'jieun' && !accountId)
+            }
             className="inline-flex items-center gap-1 rounded-xl bg-[#1d1d1f] px-3 py-2.5 text-[13px] font-medium text-white transition hover:bg-black disabled:opacity-40"
           >
             <Plus className="h-4 w-4" />

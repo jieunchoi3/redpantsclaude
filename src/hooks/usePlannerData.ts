@@ -133,19 +133,52 @@ export function usePlannerData(workspace: Workspace) {
   }, [workspace])
 
   const addCategory = useCallback(
-    async (name: string, channel: Channel, accountId?: string | null) => {
-      const maxOrder = categories
-        .filter((c) => c.channel === channel)
-        .reduce((max, c) => Math.max(max, c.sort_order), 0)
-      const created = await createCategory({
+    async (
+      name: string,
+      channel: Channel,
+      accountId?: string | null,
+    ): Promise<{ category: Category | null; error: string | null }> => {
+      if (workspace === 'jieun' && !accountId) {
+        return {
+          category: null,
+          error: '계정을 먼저 선택해 주세요.',
+        }
+      }
+
+      const scoped = categories.filter((category) => {
+        if (workspace === 'jieun') {
+          return category.account_id === accountId
+        }
+        return category.channel === channel
+      })
+      const maxOrder = scoped.reduce(
+        (max, category) => Math.max(max, category.sort_order),
+        0,
+      )
+      const result = await createCategory({
         workspace,
         account_id: accountId ?? null,
         name,
         channel,
         sort_order: maxOrder + 1,
       })
-      if (created) setCategories((prev) => [...prev, created])
-      return created
+      if (result.category) {
+        setCategories((prev) => [...prev, result.category!])
+        return result
+      }
+
+      const refreshed = await fetchCategories(workspace)
+      setCategories(refreshed)
+      const recovered = refreshed.find(
+        (category) =>
+          category.name === name.trim() &&
+          (workspace !== 'jieun' || category.account_id === accountId),
+      )
+      if (recovered) {
+        return { category: recovered, error: null }
+      }
+
+      return result
     },
     [categories, workspace],
   )

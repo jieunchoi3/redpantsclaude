@@ -442,7 +442,7 @@ function PlannerApp({
           onSave={patchIdea}
           onArchive={archiveIdea}
           onOpenCategoryManager={(accountId) => {
-            setCategoryAccountId(accountId ?? null)
+            setCategoryAccountId(accountId || null)
             setShowCategories(true)
           }}
           hooks={hookLibrary.hooks}
