@@ -319,18 +319,16 @@ export function IdeaBoard({
                   onCreateIdea={() => onCreateIdea({ accountId: account.id })}
                 />
               ))}
-              {(byAccount.get(UNCATEGORIZED_ID)?.length ?? 0) > 0 && (
-                <AccountColumn
-                  account={null}
-                  color="#C7C7CC"
-                  ideas={byAccount.get(UNCATEGORIZED_ID) ?? []}
-                  categoryMap={categoryMap}
-                  accountMap={accountMap}
-                  onOpenIdea={onOpenIdea}
-                  onDeleteIdea={onDeleteIdea}
-                  onCreateIdea={() => onCreateIdea({ accountId: null })}
-                />
-              )}
+              <AccountColumn
+                account={null}
+                color="#C7C7CC"
+                ideas={byAccount.get(UNCATEGORIZED_ID) ?? []}
+                categoryMap={categoryMap}
+                accountMap={accountMap}
+                onOpenIdea={onOpenIdea}
+                onDeleteIdea={onDeleteIdea}
+                onCreateIdea={() => onCreateIdea({ accountId: null })}
+              />
             </div>
           ) : (
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
@@ -535,13 +533,9 @@ function AccountColumn({
             onClick={onCreateIdea}
             title={`${account?.name ?? '계정 미지정'}에 아이디어 추가`}
             aria-label={`${account?.name ?? '계정 미지정'}에 아이디어 추가`}
-            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#aeaeb2] transition hover:bg-white/90 hover:text-[#1d1d1f] ${
-              ideas.length === 0
-                ? 'opacity-100'
-                : 'opacity-0 group-hover/col:opacity-100'
-            }`}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#8e8e93] transition hover:bg-white/90 hover:text-[#1d1d1f] active:scale-95"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
           </button>
           <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-[#6e6e73]">
             {ideas.length}
@@ -634,13 +628,9 @@ function CategoryColumn({
             onClick={onCreateIdea}
             title={`${title}에 아이디어 추가`}
             aria-label={`${title}에 아이디어 추가`}
-            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#aeaeb2] transition hover:bg-white/90 hover:text-[#1d1d1f] ${
-              ideas.length === 0
-                ? 'opacity-100'
-                : 'opacity-0 group-hover/col:opacity-100'
-            }`}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[#8e8e93] transition hover:bg-white/90 hover:text-[#1d1d1f] active:scale-95"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
           </button>
           <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[11px] text-[#6e6e73]">
             {ideas.length}
