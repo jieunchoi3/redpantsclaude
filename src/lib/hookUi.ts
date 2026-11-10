@@ -54,6 +54,27 @@ export type VideoLinkMeta = {
   accent: string
 }
 
+export function youtubeThumbnailUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.replace(/^www\./, '')
+    let id: string | null = null
+    if (host === 'youtu.be') {
+      id = parsed.pathname.split('/').filter(Boolean)[0] ?? null
+    } else if (host.includes('youtube.com')) {
+      id = parsed.searchParams.get('v')
+      const parts = parsed.pathname.split('/').filter(Boolean)
+      if (!id && (parts[0] === 'shorts' || parts[0] === 'embed' || parts[0] === 'live')) {
+        id = parts[1] ?? null
+      }
+    }
+    if (!id) return null
+    return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+  } catch {
+    return null
+  }
+}
+
 export function getVideoLinkMeta(url: string): VideoLinkMeta {
   try {
     const parsed = new URL(url)

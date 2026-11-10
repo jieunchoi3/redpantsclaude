@@ -12,6 +12,8 @@ export const TABLES = {
   hookAccounts: 'cp_hook_accounts',
   hookUsages: 'cp_hook_usages',
   appMeta: 'cp_app_meta',
+  brandProfiles: 'cp_brand_profiles',
+  brandShots: 'cp_brand_shots',
 } as const
 
 export const STORAGE_BUCKET = 'cp-idea-images'

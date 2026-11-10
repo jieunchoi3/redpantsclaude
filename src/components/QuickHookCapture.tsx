@@ -148,11 +148,11 @@ export function QuickHookCapture({
           />
 
           {imageUrl && (
-            <div className="relative mt-2 h-20 overflow-hidden rounded-xl bg-[#f0f0f2]">
+            <div className="relative mt-2 overflow-hidden rounded-xl bg-[#f0f0f2]">
               <img
                 src={imageUrl}
                 alt="붙여넣은 훅 이미지"
-                className="h-full w-full object-cover"
+                className="block h-auto w-full"
               />
               <button
                 type="button"

@@ -108,3 +108,26 @@ export function flushAccountNotes(accountId: string, notes: string) {
 export function accountHasNotes(account: Account): boolean {
   return Boolean(account.notes?.trim())
 }
+
+/** 훅 화면은 계정을 따로 한 번만 불러서, 사이드바에서 바꾼 목록과 어긋난다. */
+export function accountsForHooks(
+  liveWorkspaceAccounts: Account[],
+  workspace: Workspace,
+  fetchedAccounts: Account[],
+): Account[] {
+  const current =
+    workspace === 'jieun'
+      ? liveWorkspaceAccounts
+      : fetchedAccounts.filter(
+          (account) => account.workspace === workspace && !account.archived,
+        )
+  const others = fetchedAccounts.filter(
+    (account) => account.workspace !== workspace && !account.archived,
+  )
+  return [...current, ...others].sort((a, b) => {
+    if (a.workspace !== b.workspace) {
+      return a.workspace === 'redpants' ? -1 : 1
+    }
+    return a.sort_order - b.sort_order || a.name.localeCompare(b.name, 'ko')
+  })
+}

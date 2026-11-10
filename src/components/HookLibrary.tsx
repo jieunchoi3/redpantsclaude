@@ -15,8 +15,9 @@ import {
   Star,
   Trash2,
 } from 'lucide-react'
-import type { Account, HookAngle, HookItem, HookMedium } from '../types'
+import type { Account, HookAngle, HookItem, HookMedium, HookSourceKind } from '../types'
 import type { HookFetchDiagnostic, HookInput } from '../lib/hooks'
+import { analysisSearchText } from '../lib/hookAnalysis'
 import { HookAccountChips, HookAngleBadge, HookMediumBadge } from './HookBadges'
 import { HookAxisFilterRow } from './HookAxisMultiSelect'
 import { HookEditorModal } from './HookEditorModal'
@@ -84,6 +85,8 @@ export function HookLibrary({
   const [mediumFilter, setMediumFilter] = useState<Set<string>>(new Set())
   const [angleFilter, setAngleFilter] = useState<Set<string>>(new Set())
   const [accountFilter, setAccountFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState<HookSourceKind | 'all'>('all')
+  const [draftSource, setDraftSource] = useState<HookSourceKind>('reference')
   const [sort, setSort] = useState<HookSort>('latest')
   const [layout, setLayout] = useState<HookLayout>('grid')
   const [showTrash, setShowTrash] = useState(false)
@@ -126,8 +129,20 @@ export function HookLibrary({
     const filtered = hooks.filter((hook) => {
       if (hook.archived !== showTrash) return false
       if (!showTrash && showInbox && !hook.is_inbox) return false
-      if (query && !hook.content.toLocaleLowerCase('ko').includes(query)) {
+      if (sourceFilter !== 'all' && hook.source_kind !== sourceFilter) {
         return false
+      }
+      if (query) {
+        const haystack = [
+          hook.content,
+          hook.source_note,
+          hook.video_url,
+          analysisSearchText(hook.analysis),
+        ]
+          .filter(Boolean)
+          .join('\n')
+          .toLocaleLowerCase('ko')
+        if (!haystack.includes(query)) return false
       }
       if (mediumFilter.size > 0) {
         const hasMedium = hook.medium_ids.some((id) => mediumFilter.has(id))
@@ -162,7 +177,34 @@ export function HookLibrary({
     showTrash,
     showInbox,
     sort,
+    sourceFilter,
   ])
+
+  const accountDigest = useMemo(() => {
+    if (accountFilter === 'all') return null
+    const account = accountById.get(accountFilter)
+    if (!account) return null
+    const related = hooks.filter(
+      (hook) => !hook.archived && hook.account_ids.includes(account.id),
+    )
+    const own = related.filter((hook) => hook.source_kind === 'own')
+    const reference = related.filter((hook) => hook.source_kind !== 'own')
+    const patterns = new Map<string, number>()
+    for (const hook of own) {
+      const pattern = hook.analysis?.pattern.trim()
+      if (!pattern) continue
+      patterns.set(pattern, (patterns.get(pattern) ?? 0) + 1)
+    }
+    return {
+      account,
+      own,
+      reference,
+      analyzed: own.filter((hook) => hook.analysis).length,
+      patterns: [...patterns.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4),
+    }
+  }, [accountById, accountFilter, hooks])
 
   if (loading) {
     return (
@@ -190,7 +232,7 @@ export function HookLibrary({
                 훅 라이브러리
               </h2>
               <p className="text-[12px] text-[#8e8e93]">
-                워크스페이스와 관계없이 함께 쓰는 도입부 아이디어
+                저장만 하지 않고, 분해된 패턴으로 다시 찾습니다
               </p>
             </div>
           </div>
@@ -247,7 +289,10 @@ export function HookLibrary({
             {!showTrash && (
               <button
                 type="button"
-                onClick={() => setEditing(null)}
+                onClick={() => {
+                  setDraftSource(sourceFilter === 'own' ? 'own' : 'reference')
+                  setEditing(null)
+                }}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[12px] font-semibold text-white shadow-sm transition hover:bg-black hover:shadow"
               >
                 <Plus className="h-4 w-4" />
@@ -263,7 +308,7 @@ export function HookLibrary({
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="훅 문구 검색"
+              placeholder="훅, 패턴, 분해 내용 검색"
               className="w-full rounded-2xl bg-[#f5f5f7] py-3 pl-10 pr-4 text-[13px] text-[#1d1d1f] outline-none ring-1 ring-transparent transition placeholder:text-[#a4a4a9] focus:bg-white focus:ring-[#b49ba1]/35"
             />
           </label>
@@ -318,6 +363,29 @@ export function HookLibrary({
           </div>
         </div>
 
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              ['all', '전체'],
+              ['reference', '레퍼런스'],
+              ['own', '내 콘텐츠'],
+            ] as [HookSourceKind | 'all', string][]
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setSourceFilter(id)}
+              className={`rounded-full px-3 py-1.5 text-[12px] font-medium transition ${
+                sourceFilter === id
+                  ? 'bg-[#1d1d1f] text-white'
+                  : 'bg-[#f5f5f7] text-[#5d5d62] hover:bg-[#ededf0]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {!showTrash && (mediums.length > 0 || angles.length > 0) && (
           <div className="space-y-2">
             <HookAxisFilterRow
@@ -353,6 +421,42 @@ export function HookLibrary({
           </div>
         )}
       </div>
+
+      {accountDigest && (
+        <div className="mb-4 rounded-[24px] bg-white p-5 shadow-[var(--shadow-sm)]">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[12px] font-medium text-[#8e8e93]">계정 데이터</p>
+              <h3 className="mt-1 text-[18px] font-semibold text-[#1d1d1f]">
+                {accountDigest.account.name}
+              </h3>
+            </div>
+            <p className="text-[12px] text-[#6e6e73]">
+              내 콘텐츠 {accountDigest.own.length}개 · 분해{' '}
+              {accountDigest.analyzed}개 · 레퍼런스 {accountDigest.reference.length}개
+            </p>
+          </div>
+          {accountDigest.patterns.length > 0 ? (
+            <ul className="mt-4 space-y-2">
+              {accountDigest.patterns.map(([pattern, count]) => (
+                <li
+                  key={pattern}
+                  className="rounded-xl bg-[#f6f4f5] px-3 py-2 text-[12px] leading-5 text-[#3a3a3c]"
+                >
+                  <span className="mr-2 text-[10px] font-semibold text-[#8d6d76]">
+                    {count}회
+                  </span>
+                  {pattern}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-3 text-[12px] leading-5 text-[#8e8e93]">
+              이 계정으로 내 영상을 올리고 AI 분해를 하면, 반복되는 패턴이 여기에 모여요.
+            </p>
+          )}
+        </div>
+      )}
 
       {error ? (
         <div className="rounded-[24px] border border-[#e9d8dc] bg-[#fff9fa] p-7 text-center">
@@ -401,7 +505,7 @@ export function HookLibrary({
         <div
           className={
             layout === 'grid'
-              ? 'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3'
+              ? 'columns-1 gap-4 md:columns-2 xl:columns-3'
               : 'flex flex-col gap-3'
           }
         >
@@ -448,6 +552,7 @@ export function HookLibrary({
           onAddAngle={onAddAngle}
           onUpdateAngle={onUpdateAngle}
           onDeleteAngle={onDeleteAngle}
+          defaultSourceKind={draftSource}
         />
       )}
       {showTaxonomyManager && (
@@ -537,10 +642,13 @@ function HookCard({
 }) {
   const isList = layout === 'list'
   const accentColor = angles[0]?.color ?? mediums[0]?.color
+  const missingFile =
+    (hook.media_kind === 'image' && !hook.image_url) ||
+    (hook.media_kind === 'video_file' && !hook.video_file_url)
   return (
     <article
       className={`group overflow-hidden rounded-[24px] bg-white shadow-[var(--shadow-sm)] ring-1 ring-black/[0.035] transition duration-200 hover:-translate-y-0.5 hover:shadow-[var(--shadow)] ${
-        isList ? 'flex min-h-36' : 'flex flex-col'
+        isList ? 'flex min-h-36' : 'mb-4 flex break-inside-avoid flex-col'
       }`}
       style={
         !isList && accentColor
@@ -548,14 +656,15 @@ function HookCard({
           : undefined
       }
     >
-      <HookMediaPreview
-        hook={hook}
-        compact={isList}
-        accentColor={accentColor}
-      />
+      <HookMediaPreview hook={hook} compact={isList} />
       <div className="flex min-w-0 flex-1 flex-col p-5">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap gap-1.5">
+            {hook.source_kind === 'own' && (
+              <span className="rounded-full bg-[#eef3f8] px-2.5 py-1 text-[10px] font-semibold text-[#4d6278]">
+                내 콘텐츠
+              </span>
+            )}
             {hook.is_inbox && (
               <span className="rounded-full bg-[#fff1d8] px-2.5 py-1 text-[10px] font-semibold text-[#8a672f]">
                 인박스
@@ -621,9 +730,39 @@ function HookCard({
           {hook.content}
         </p>
 
+        {hook.analysis && (
+          <div className="mt-3 rounded-xl bg-[#f6f4f5] px-3 py-2.5">
+            <p className="text-[10px] font-semibold text-[#8d6d76]">다시 쓸 패턴</p>
+            <p className="mt-0.5 text-[12px] leading-5 text-[#2c2c2e]">
+              {hook.analysis.pattern || hook.analysis.hook_line}
+            </p>
+            {hook.analysis.takeaway && (
+              <p className="mt-1 text-[11px] leading-4 text-[#6e6e73]">
+                {hook.analysis.takeaway}
+              </p>
+            )}
+          </div>
+        )}
+
+        {hook.media_kind === 'video_file' && hook.video_url && (
+          <a
+            href={hook.video_url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-2 block truncate text-[11px] text-[#6d5a62] underline-offset-2 hover:underline"
+          >
+            원본 릴스 열기
+          </a>
+        )}
+
         {hook.source_note && (
           <p className="mt-2 line-clamp-1 text-[11px] text-[#9a9a9f]">
             추가 메모 · {hook.source_note}
+          </p>
+        )}
+        {missingFile && (
+          <p className="mt-2 text-[11px] text-[#b0a0a4]">
+            파일이 저장되지 않았어요. 편집에서 다시 올려 주세요.
           </p>
         )}
 

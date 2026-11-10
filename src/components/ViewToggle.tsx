@@ -11,6 +11,7 @@ const VIEWS: { id: ViewMode; label: string }[] = [
   { id: 'board', label: '아이디어 보드' },
   { id: 'placement', label: '이분할 모드' },
   { id: 'hooks', label: '훅 라이브러리' },
+  { id: 'branding', label: '브랜딩' },
 ]
 
 export function ViewToggle({

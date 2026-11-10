@@ -12,6 +12,36 @@ export type GeminiImageInput = {
 export type GeminiRequestBody = {
   prompt: string
   image?: GeminiImageInput
+  images?: GeminiImageInput[]
+}
+
+function readImage(raw: unknown): GeminiImageInput | null {
+  if (!raw || typeof raw !== 'object') return null
+  const record = raw as { mime_type?: unknown; mimeType?: unknown; data?: unknown }
+  const mime =
+    typeof record.mime_type === 'string'
+      ? record.mime_type
+      : typeof record.mimeType === 'string'
+        ? record.mimeType
+        : ''
+  const data = typeof record.data === 'string' ? record.data : ''
+  if (!mime || !data) return null
+  return { mime_type: mime, data }
+}
+
+export function readGeminiImages(body: {
+  image?: unknown
+  images?: unknown
+}): GeminiImageInput[] {
+  const fromList = Array.isArray(body.images)
+    ? body.images.flatMap((item) => {
+        const image = readImage(item)
+        return image ? [image] : []
+      })
+    : []
+  if (fromList.length > 0) return fromList.slice(0, 6)
+  const single = readImage(body.image)
+  return single ? [single] : []
 }
 
 export type GeminiAttempt = {
@@ -36,11 +66,18 @@ export function buildGeminiContents(body: GeminiRequestBody) {
     { text: string } | { inline_data: { mime_type: string; data: string } }
   > = []
 
-  if (body.image?.data && body.image.mime_type) {
+  const images =
+    body.images && body.images.length > 0
+      ? body.images.slice(0, 6)
+      : body.image?.data && body.image.mime_type
+        ? [body.image]
+        : []
+  for (const image of images) {
+    if (!image.data || !image.mime_type) continue
     parts.push({
       inline_data: {
-        mime_type: body.image.mime_type,
-        data: body.image.data,
+        mime_type: image.mime_type,
+        data: image.data,
       },
     })
   }

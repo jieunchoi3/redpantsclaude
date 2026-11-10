@@ -5,7 +5,7 @@ import type { Plugin } from 'vite'
 import type { IncomingMessage } from 'node:http'
 import {
   generateWithGemini,
-  type GeminiImageInput,
+  readGeminiImages,
 } from './api/geminiShared.js'
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -39,7 +39,8 @@ function geminiDevApiPlugin(apiKey: string | undefined): Plugin {
           const raw = await readBody(req)
           const body = JSON.parse(raw || '{}') as {
             prompt?: string
-            image?: GeminiImageInput & { mimeType?: string }
+            image?: unknown
+            images?: unknown
           }
           const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
           if (!prompt) {
@@ -49,19 +50,12 @@ function geminiDevApiPlugin(apiKey: string | undefined): Plugin {
             return
           }
 
-          let image: GeminiImageInput | undefined
-          if (body.image && typeof body.image.data === 'string') {
-            const mime =
-              body.image.mime_type ??
-              (typeof body.image.mimeType === 'string'
-                ? body.image.mimeType
-                : '')
-            if (mime) {
-              image = { mime_type: mime, data: body.image.data }
-            }
-          }
-
-          const result = await generateWithGemini(apiKey, { prompt, image })
+          const images = readGeminiImages(body)
+          const result = await generateWithGemini(apiKey, {
+            prompt,
+            images,
+            image: images[0],
+          })
           if (!result.ok) {
             res.statusCode = 502
             res.setHeader('Content-Type', 'application/json')

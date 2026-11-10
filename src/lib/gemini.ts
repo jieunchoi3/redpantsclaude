@@ -49,6 +49,7 @@ function formatGeminiError(
 async function postGemini(body: {
   prompt: string
   image?: GeminiImagePayload
+  images?: GeminiImagePayload[]
 }): Promise<{ text: string; model?: string }> {
   const res = await fetch('/api/gemini', {
     method: 'POST',
@@ -88,6 +89,13 @@ export async function callGeminiMultimodal(
   image: GeminiImagePayload,
 ): Promise<{ text: string; model?: string }> {
   return postGemini({ prompt, image })
+}
+
+export async function callGeminiImages(
+  prompt: string,
+  images: GeminiImagePayload[],
+): Promise<{ text: string; model?: string }> {
+  return postGemini({ prompt, images: images.slice(0, 6) })
 }
 
 /** 마크다운 코드펜스 등을 제거하고 JSON 파싱 */

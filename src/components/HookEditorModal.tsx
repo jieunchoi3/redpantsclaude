@@ -9,18 +9,22 @@ import {
 } from 'lucide-react'
 import { accountColor } from '../lib/accounts'
 import { GeminiApiError } from '../lib/gemini'
+import { analyzeReelFrames } from '../lib/hookAnalysis'
 import {
   classifyHookTaxonomy,
   generateHookVariations,
   type HookVariationContext,
 } from '../lib/hookAi'
+import { captureVideoFrames, imageSourceToPayload } from '../lib/videoFrames'
 import { uploadHookMedia } from '../lib/storage'
 import type {
   Account,
+  HookAnalysis,
   HookAngle,
   HookItem,
   HookMediaKind,
   HookMedium,
+  HookSourceKind,
 } from '../types'
 import type { HookInput } from '../lib/hooks'
 import { HookAxisMultiSelect } from './HookAxisMultiSelect'
@@ -57,6 +61,7 @@ interface HookEditorModalProps {
   ) => Promise<boolean>
   onDeleteAngle: (id: string) => Promise<boolean>
   variationContext?: HookVariationContext
+  defaultSourceKind?: HookSourceKind
 }
 
 export function HookEditorModal({
@@ -75,6 +80,7 @@ export function HookEditorModal({
   onUpdateAngle,
   onDeleteAngle,
   variationContext,
+  defaultSourceKind = 'reference',
 }: HookEditorModalProps) {
   const [content, setContent] = useState(hook?.content ?? '')
   const [mediumIds, setMediumIds] = useState<string[]>(hook?.medium_ids ?? [])
@@ -92,6 +98,14 @@ export function HookEditorModal({
     hook?.video_file_url ?? '',
   )
   const [sourceNote, setSourceNote] = useState(hook?.source_note ?? '')
+  const [sourceKind, setSourceKind] = useState<HookSourceKind>(
+    hook?.source_kind ?? defaultSourceKind,
+  )
+  const [analysis, setAnalysis] = useState<HookAnalysis | null>(
+    hook?.analysis ?? null,
+  )
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -112,19 +126,22 @@ export function HookEditorModal({
     setVideoUrl(hook?.video_url ?? '')
     setVideoFileUrl(hook?.video_file_url ?? '')
     setSourceNote(hook?.source_note ?? '')
+    setSourceKind(hook?.source_kind ?? defaultSourceKind)
+    setAnalysis(hook?.analysis ?? null)
+    setVideoFile(null)
     setShowMediumManager(false)
     setShowAngleManager(false)
     setVariations([])
     setError(null)
-  }, [hook])
+  }, [defaultSourceKind, hook])
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape' && !saving && !uploading) onClose()
+      if (event.key === 'Escape' && !saving && !uploading && !analyzing) onClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, saving, uploading])
+  }, [analyzing, onClose, saving, uploading])
 
   const sortedAccounts = useMemo(
     () =>
@@ -158,7 +175,10 @@ export function HookEditorModal({
     if (kind === 'image') {
       setImageUrl(url)
       setImageFile(file)
-    } else setVideoFileUrl(url)
+    } else {
+      setVideoFileUrl(url)
+      setVideoFile(file)
+    }
   }
 
   function clearImage() {
@@ -177,30 +197,49 @@ export function HookEditorModal({
   }
 
   async function handleSave() {
-    if (!content.trim()) {
-      setError('훅 내용을 입력해 주세요.')
+    const hookText = content.trim() || analysis?.hook_line.trim() || ''
+    if (!hookText) {
+      setError('훅 내용을 입력하거나, 영상을 올리고 AI 분해를 먼저 해 주세요.')
       return
     }
-    if (mediaKind === 'video_link' && videoUrl) {
+    if (sourceKind === 'own' && accountIds.length === 0) {
+      setError('내 콘텐츠는 계정을 하나 골라야 나중에 계정별 데이터로 모을 수 있어요.')
+      return
+    }
+    if ((mediaKind === 'video_link' || mediaKind === 'video_file') && videoUrl.trim()) {
       try {
-        new URL(videoUrl)
+        new URL(videoUrl.trim())
       } catch {
         setError('올바른 영상 링크를 입력해 주세요.')
         return
       }
     }
+    const fileUrl = mediaKind === 'video_file' ? videoFileUrl || null : null
+    const image = mediaKind === 'image' ? imageUrl || null : null
+    const link =
+      mediaKind === 'video_file' || mediaKind === 'video_link'
+        ? videoUrl.trim() || null
+        : null
+    const resolvedKind: HookMediaKind = fileUrl
+      ? 'video_file'
+      : image
+        ? 'image'
+        : link
+          ? 'video_link'
+          : 'none'
     setSaving(true)
     setError(null)
     const ok = await onSave({
-      content: content.trim(),
+      content: hookText,
       medium_ids: mediumIds,
       angle_ids: angleIds,
-      media_kind: mediaKind,
-      image_url: mediaKind === 'image' ? imageUrl || null : null,
-      video_url: mediaKind === 'video_link' ? videoUrl || null : null,
-      video_file_url:
-        mediaKind === 'video_file' ? videoFileUrl || null : null,
+      media_kind: resolvedKind,
+      image_url: image,
+      video_url: link,
+      video_file_url: fileUrl,
       source_note: sourceNote.trim() || null,
+      source_kind: sourceKind,
+      analysis,
       is_inbox: hook?.is_inbox
         ? mediumIds.length === 0 &&
           angleIds.length === 0 &&
@@ -210,7 +249,54 @@ export function HookEditorModal({
     })
     setSaving(false)
     if (ok) onClose()
-    else setError('저장하지 못했어요. 데이터베이스 설정을 확인해 주세요.')
+    else
+      setError(
+        '저장하지 못했어요. Supabase에서 supabase/v6_hook_analysis.sql 을 한 번 실행해 주세요.',
+      )
+  }
+
+  async function handleAnalyze() {
+    if (sourceKind === 'own' && accountIds.length === 0) {
+      setError('내 콘텐츠는 계정을 먼저 고르면, 그 계정 데이터로 쌓여요.')
+      return
+    }
+    const hasVideo = Boolean(videoFile || videoFileUrl)
+    const hasImage = Boolean(imageFile || imageUrl)
+    if (!hasVideo && !hasImage) {
+      setError(
+        '인스타 링크만으로는 릴스를 가져올 수 없어요. 영상 파일을 올리면 AI가 초반 화면을 분해합니다.',
+      )
+      return
+    }
+    setAnalyzing(true)
+    setError(null)
+    try {
+      const frames = hasVideo
+        ? await captureVideoFrames(videoFile ?? videoFileUrl)
+        : [await imageSourceToPayload(imageFile ?? imageUrl)]
+      const accountNames = accounts
+        .filter((account) => accountIds.includes(account.id))
+        .map((account) => account.name)
+      const next = await analyzeReelFrames({
+        frames,
+        sourceKind,
+        accountNames,
+        link: videoUrl.trim(),
+        note: sourceNote.trim(),
+      })
+      setAnalysis(next)
+      if (!content.trim()) setContent(next.hook_line)
+    } catch (err) {
+      const message =
+        err instanceof GeminiApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'AI 분해에 실패했어요.'
+      setError(message)
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   async function handleAiClassify() {
@@ -333,6 +419,37 @@ export function HookEditorModal({
                 자동으로 정리 완료 처리됩니다.
               </div>
             )}
+            <div>
+              <span className="mb-2 block text-[13px] font-semibold text-[#3a3a3c]">
+                어디에 둘까요
+              </span>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    ['reference', '레퍼런스', '잘 걸린 남의 릴스. 나중에 패턴으로 검색해요.'],
+                    ['own', '내 콘텐츠', '내 영상을 올리면 계정별 데이터로 쌓여요.'],
+                  ] as [HookSourceKind, string, string][]
+                ).map(([id, label, hint]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSourceKind(id)}
+                    className={`rounded-2xl px-4 py-3 text-left transition ${
+                      sourceKind === id
+                        ? 'bg-white shadow-sm ring-2 ring-[#1d1d1f]'
+                        : 'bg-white/70 ring-1 ring-black/[0.05] hover:bg-white'
+                    }`}
+                  >
+                    <span className="block text-[13px] font-semibold text-[#1d1d1f]">
+                      {label}
+                    </span>
+                    <span className="mt-1 block text-[11px] leading-4 text-[#8e8e93]">
+                      {hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <label className="block">
               <span className="mb-2 block text-[13px] font-semibold text-[#3a3a3c]">
                 훅 내용 <span className="text-[#c75d6d]">*</span>
@@ -608,19 +725,105 @@ export function HookEditorModal({
                     className="mt-2 w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[13px] outline-none ring-1 ring-transparent focus:ring-[#b49ba1]/40"
                   />
                   <p className="mt-2 text-[11px] leading-4 text-[#8e8e93]">
-                    앱 안에서 재생하지 않고, 클릭하면 원본 링크를 새 탭에서 열어요.
+                    링크만 저장하면 나중에 원본은 열 수 있지만, 인스타 영상 자체는 가져오지 못해요. 파일을 올리면 AI가 초반 화면을 분해합니다.
                   </p>
+                  <label className="mt-3 inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#f5f5f7] px-3 py-2 text-[12px] font-medium text-[#3a3a3c]">
+                    <Upload className="h-3.5 w-3.5" />
+                    영상 파일 올리기
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime"
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (file) {
+                          setMediaKind('video_file')
+                          void upload(file, 'video_file')
+                        }
+                        event.target.value = ''
+                      }}
+                    />
+                  </label>
                 </div>
               )}
               {mediaKind === 'video_file' && (
-                <MediaUploadBox
-                  accept="video/mp4,video/webm,video/quicktime"
-                  uploading={uploading}
-                  url={videoFileUrl}
-                  kind="video"
-                  onFile={(file) => void upload(file, 'video_file')}
-                  onClear={() => setVideoFileUrl('')}
-                />
+                <div className="space-y-3">
+                  <MediaUploadBox
+                    accept="video/mp4,video/webm,video/quicktime"
+                    uploading={uploading}
+                    url={videoFileUrl}
+                    kind="video"
+                    onFile={(file) => void upload(file, 'video_file')}
+                    onClear={() => {
+                      setVideoFileUrl('')
+                      setVideoFile(null)
+                    }}
+                  />
+                  <label className="block rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/[0.05]">
+                    <span className="text-[12px] font-medium text-[#6e6e73]">
+                      원본 릴스 링크 (있으면)
+                    </span>
+                    <input
+                      type="url"
+                      value={videoUrl}
+                      onChange={(event) => setVideoUrl(event.target.value)}
+                      placeholder="https://www.instagram.com/reel/..."
+                      className="mt-2 w-full rounded-xl bg-[#f5f5f7] px-3 py-2.5 text-[13px] outline-none ring-1 ring-transparent focus:ring-[#b49ba1]/40"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/[0.05]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[13px] font-semibold text-[#1d1d1f]">
+                    AI 분해
+                  </p>
+                  <p className="mt-1 text-[11px] leading-4 text-[#8e8e93]">
+                    영상에서 초반·중간·끝 화면을 보고, 검색할 수 있는 패턴으로 저장해요.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={analyzing || uploading}
+                  onClick={() => void handleAnalyze()}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#1d1d1f] px-3 py-2 text-[12px] font-semibold text-white disabled:opacity-45"
+                >
+                  {analyzing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  분해하기
+                </button>
+              </div>
+              {analysis && (
+                <dl className="mt-4 space-y-3 border-t border-black/[0.06] pt-4 text-[12px] leading-5">
+                  {(
+                    [
+                      ['훅', analysis.hook_line],
+                      ['처음 보이는 것', analysis.visual],
+                      ['대사·자막', analysis.spoken],
+                      ['구조', analysis.structure],
+                      ['왜 멈추나', analysis.why],
+                      ['다시 쓸 패턴', analysis.pattern],
+                      ['계정에 남길 것', analysis.takeaway],
+                    ] as [string, string][]
+                  )
+                    .filter(([, value]) => value)
+                    .map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="text-[10px] font-semibold tracking-wide text-[#8d6d76]">
+                          {label}
+                        </dt>
+                        <dd className="mt-0.5 whitespace-pre-wrap text-[#2c2c2e]">
+                          {value}
+                        </dd>
+                      </div>
+                    ))}
+                </dl>
               )}
             </div>
 
@@ -643,7 +846,7 @@ export function HookEditorModal({
             </button>
             <button
               type="button"
-              disabled={saving || uploading}
+              disabled={saving || uploading || analyzing}
               onClick={() => void handleSave()}
               className="inline-flex min-w-[88px] items-center justify-center gap-1.5 rounded-xl bg-[#1d1d1f] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:bg-black disabled:opacity-45"
             >
@@ -680,13 +883,13 @@ function MediaUploadBox({
             <img
               src={url}
               alt="훅 이미지 미리보기"
-              className="max-h-72 w-full object-contain"
+              className="block h-auto w-full bg-[#f3f3f5]"
             />
           ) : (
             <video
               src={url}
               controls
-              className="max-h-72 w-full bg-black object-contain"
+              className="block h-auto w-full bg-black"
             />
           )}
           <button

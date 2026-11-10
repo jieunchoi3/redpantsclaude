@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import {
   generateWithGemini,
-  type GeminiImageInput,
+  readGeminiImages,
   type GeminiRequestBody,
 } from './geminiShared.js'
 
@@ -25,22 +25,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'prompt is required' })
   }
 
-  let image: GeminiImageInput | undefined
-  const rawImage = req.body?.image
-  if (rawImage && typeof rawImage === 'object') {
-    const mime =
-      typeof rawImage.mime_type === 'string'
-        ? rawImage.mime_type
-        : typeof rawImage.mimeType === 'string'
-          ? rawImage.mimeType
-          : ''
-    const data = typeof rawImage.data === 'string' ? rawImage.data : ''
-    if (mime && data) {
-      image = { mime_type: mime, data }
-    }
+  const images = readGeminiImages({
+    image: req.body?.image,
+    images: req.body?.images,
+  })
+  const requestBody: GeminiRequestBody = {
+    prompt,
+    images,
+    image: images[0],
   }
-
-  const requestBody: GeminiRequestBody = { prompt, image }
 
   try {
     const result = await generateWithGemini(apiKey, requestBody)

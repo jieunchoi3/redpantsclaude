@@ -56,3 +56,25 @@ export async function uploadHookMedia(file: File): Promise<string | null> {
   const { data } = sb.storage.from(HOOK_MEDIA_BUCKET).getPublicUrl(path)
   return data.publicUrl
 }
+
+export async function uploadBrandImage(file: File): Promise<string | null> {
+  const sb = getSupabase()
+  if (!sb) return null
+
+  const ext = extensionFromMime(file.type || 'image/jpeg')
+  const path = `branding/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`
+
+  const { error } = await sb.storage.from(HOOK_MEDIA_BUCKET).upload(path, file, {
+    cacheControl: '3600',
+    upsert: false,
+    contentType: file.type || `image/${ext}`,
+  })
+
+  if (error) {
+    console.warn('[cp-brand-media] upload error:', error.message)
+    return null
+  }
+
+  const { data } = sb.storage.from(HOOK_MEDIA_BUCKET).getPublicUrl(path)
+  return data.publicUrl
+}

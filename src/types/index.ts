@@ -20,13 +20,56 @@ export const IDEA_STATUSES: IdeaStatus[] = [
   '업로드 완료',
 ]
 
-export type ViewMode = 'calendar' | 'board' | 'placement' | 'hooks'
+export type ViewMode = 'calendar' | 'board' | 'placement' | 'hooks' | 'branding'
+
+export type BrandShotKind = 'profile' | 'bio' | 'editing' | 'other'
+
+export interface BrandAnalysis {
+  profile: string
+  bio: string
+  editing: string
+  pattern: string
+  takeaway: string
+  analyzed_at: string
+}
+
+export interface BrandProfile {
+  id: string
+  name: string
+  handle: string | null
+  notes: string | null
+  analysis: BrandAnalysis | null
+  archived: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface BrandShot {
+  id: string
+  profile_id: string
+  kind: BrandShotKind
+  image_url: string
+  created_at: string
+}
 
 export type HookMediaKind =
   | 'none'
   | 'image'
   | 'video_link'
   | 'video_file'
+
+export type HookSourceKind = 'reference' | 'own'
+
+export interface HookAnalysis {
+  hook_line: string
+  visual: string
+  spoken: string
+  structure: string
+  why: string
+  pattern: string
+  takeaway: string
+  analyzed_at: string
+}
 
 export interface Category {
   id: string
@@ -78,6 +121,8 @@ export interface ContentHook {
   video_url: string | null
   video_file_url: string | null
   source_note: string | null
+  source_kind: HookSourceKind
+  analysis: HookAnalysis | null
   is_inbox: boolean
   used_count: number
   archived: boolean

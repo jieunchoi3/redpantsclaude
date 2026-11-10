@@ -2,13 +2,16 @@ import type {
   Account,
   ContentHook,
   HookAngle,
+  HookAnalysis,
   HookItem,
   HookMediaKind,
   HookMedium,
+  HookSourceKind,
   HookTaxonomy,
   HookUsage,
   HookUsageWithIdea,
 } from '../types'
+import { normalizeHookAnalysis } from './hookAnalysis'
 import { TABLES } from './constants'
 import { getSupabase } from './supabase'
 
@@ -21,6 +24,8 @@ export type HookInput = {
   video_url: string | null
   video_file_url: string | null
   source_note: string | null
+  source_kind?: HookSourceKind
+  analysis?: HookAnalysis | null
   is_inbox?: boolean
   account_ids: string[]
 }
@@ -297,8 +302,12 @@ export async function fetchHookLibrary(): Promise<HookLibraryData> {
     const ratings = hookUsages
       .map((usage) => usage.rating)
       .filter((rating): rating is number => typeof rating === 'number')
+    const sourceKind: HookSourceKind =
+      hook.source_kind === 'own' ? 'own' : 'reference'
     return {
       ...hook,
+      source_kind: sourceKind,
+      analysis: normalizeHookAnalysis(hook.analysis),
       medium_ids: mediumIdsByHook.get(hook.id) ?? [],
       angle_ids: angleIdsByHook.get(hook.id) ?? [],
       account_ids: accountIdsByHook.get(hook.id) ?? [],
@@ -427,14 +436,23 @@ export async function fetchHookUsageHistory(
   }))
 }
 
+function hookWritePayload(input: HookInput) {
+  const { account_ids, medium_ids, angle_ids, source_kind, analysis, ...payload } =
+    input
+  const row: Record<string, unknown> = { ...payload }
+  if (source_kind) row.source_kind = source_kind
+  if (analysis !== undefined) row.analysis = analysis
+  return { row, account_ids, medium_ids, angle_ids }
+}
+
 export async function createHook(input: HookInput): Promise<ContentHook | null> {
   const sb = getSupabase()
   if (!sb) return null
-  const { account_ids, medium_ids, angle_ids, ...payload } = input
+  const { row, account_ids, medium_ids, angle_ids } = hookWritePayload(input)
   const { data, error } = await sb
     .from(TABLES.hooks)
     .insert({
-      ...payload,
+      ...row,
       hook_type: null,
       archived: false,
       used_count: 0,
@@ -471,11 +489,11 @@ export async function updateHook(
 ): Promise<ContentHook | null> {
   const sb = getSupabase()
   if (!sb) return null
-  const { account_ids, medium_ids, angle_ids, ...payload } = input
+  const { row, account_ids, medium_ids, angle_ids } = hookWritePayload(input)
   const { data, error } = await sb
     .from(TABLES.hooks)
     .update({
-      ...payload,
+      ...row,
       hook_type: null,
       updated_at: new Date().toISOString(),
     })

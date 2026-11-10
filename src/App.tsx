@@ -17,6 +17,7 @@ import { CategoryManager } from './components/CategoryManager'
 import { TrashPanel } from './components/TrashPanel'
 import { WeeklyGoalBar } from './components/WeeklyGoalBar'
 import { HookLibrary } from './components/HookLibrary'
+import { BrandingLibrary } from './components/BrandingLibrary'
 import { QuickHookCapture } from './components/QuickHookCapture'
 import {
   BoardSkeleton,
@@ -27,6 +28,7 @@ import { SmartSearchBar } from './components/SmartSearchBar'
 import { Toast, useToast } from './components/Toast'
 import { usePlannerData } from './hooks/usePlannerData'
 import { useHookLibrary } from './hooks/useHookLibrary'
+import { useBranding } from './hooks/useBranding'
 import { useSmartSearch } from './hooks/useSmartSearch'
 import type { PlacementSuggestion } from './lib/autoPlace'
 import type { CalendarFilters } from './lib/calendarFilters'
@@ -37,6 +39,7 @@ import {
   writeWorkspaceToUrl,
   type Workspace,
 } from './lib/workspace'
+import { accountsForHooks } from './lib/accounts'
 import type { Idea, ViewMode } from './types'
 
 const DEFAULT_FILTERS: CalendarFilters = {
@@ -120,6 +123,7 @@ function PlannerApp({
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([])
   const [filters, setFilters] = useState<CalendarFilters>(DEFAULT_FILTERS)
   const toast = useToast()
+  const branding = useBranding()
 
   const {
     ideas,
@@ -143,6 +147,10 @@ function PlannerApp({
     patchAccountNotes,
     archiveAccount,
   } = usePlannerData(workspace)
+  const hookAccounts = useMemo(
+    () => accountsForHooks(accounts, workspace, hookLibrary.hookAccounts),
+    [accounts, hookLibrary.hookAccounts, workspace],
+  )
   const visibleIdeas = useMemo(
     () =>
       workspace === 'jieun' && selectedAccountIds.length > 0
@@ -319,12 +327,24 @@ function PlannerApp({
             key={`${view}-${workspace === 'jieun' ? jieunCalendarMode : 'default'}`}
             className="fade-in transition-opacity duration-200"
           >
-            {view === 'hooks' ? (
+            {view === 'branding' ? (
+              <BrandingLibrary
+                profiles={branding.profiles}
+                shots={branding.shots}
+                loading={branding.loading}
+                error={branding.error}
+                onAddProfile={branding.addProfile}
+                onUpdateProfile={branding.patchProfile}
+                onArchiveProfile={branding.archiveProfile}
+                onAddShot={branding.addShot}
+                onDeleteShot={branding.removeShot}
+              />
+            ) : view === 'hooks' ? (
               <HookLibrary
                 hooks={hookLibrary.hooks}
                 mediums={hookLibrary.hookMediums}
                 angles={hookLibrary.hookAngles}
-                accounts={hookLibrary.hookAccounts}
+                accounts={hookAccounts}
                 loading={hookLibrary.loading}
                 error={hookLibrary.error}
                 diagnostics={hookLibrary.diagnostics}
@@ -448,7 +468,7 @@ function PlannerApp({
           hooks={hookLibrary.hooks}
           hookMediums={hookLibrary.hookMediums}
           hookAngles={hookLibrary.hookAngles}
-          hookAccounts={hookLibrary.hookAccounts}
+          hookAccounts={hookAccounts}
           hookUsages={hookLibrary.usages}
           hooksLoading={hookLibrary.loading}
           onApplyHook={hookLibrary.applyHookToIdea}
